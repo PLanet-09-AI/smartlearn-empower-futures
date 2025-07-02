@@ -4,10 +4,18 @@ import { Button } from "@/components/ui/button";
 
 interface HeaderProps {
   isLoggedIn: boolean;
-  onLogout: () => void;
+  onLogout: () => Promise<void>;
 }
 
 const Header = ({ isLoggedIn, onLogout }: HeaderProps) => {
+  const handleLogout = async () => {
+    try {
+      await onLogout();
+    } catch (error) {
+      console.error("Logout error:", error);
+    }
+  };
+
   return (
     <header className="bg-white shadow-sm border-b border-gray-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -24,7 +32,7 @@ const Header = ({ isLoggedIn, onLogout }: HeaderProps) => {
           
           {isLoggedIn && (
             <Button
-              onClick={onLogout}
+              onClick={handleLogout}
               variant="outline"
               size="sm"
               className="flex items-center space-x-2"
