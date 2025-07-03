@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -6,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { BookOpen, Clock, Users, Star, Search, Filter, DollarSign, Award, CheckCircle } from "lucide-react";
+import { BookOpen, Clock, Users, Star, Search, Filter, Award, CheckCircle, Play, FileText } from "lucide-react";
+import CourseContent from "./CourseContent";
 
 interface CourseLibraryProps {
   userRole: 'learner' | 'educator' | 'admin';
@@ -17,6 +17,8 @@ const CourseLibrary = ({ userRole }: CourseLibraryProps) => {
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [selectedLevel, setSelectedLevel] = useState("all");
   const [selectedCourse, setSelectedCourse] = useState<any>(null);
+  const [enrolledCourses, setEnrolledCourses] = useState<number[]>([]);
+  const [viewingCourse, setViewingCourse] = useState<any>(null);
 
   const courses = [
     {
@@ -31,7 +33,6 @@ const CourseLibrary = ({ userRole }: CourseLibraryProps) => {
       rating: 4.8,
       instructor: "Dr. Sarah Chen",
       image: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=300&h=200&fit=crop",
-      price: 299,
       prerequisites: ["Basic Mathematics", "Computer Literacy"],
       learningObjectives: [
         "Understand fundamental data analysis concepts",
@@ -50,7 +51,71 @@ const CourseLibrary = ({ userRole }: CourseLibraryProps) => {
         "Final Project: Real-world Analysis"
       ],
       completionRate: 89,
-      certificates: true
+      certificates: true,
+      content: [
+        {
+          id: 1,
+          title: "Introduction to Data Analytics",
+          type: "video",
+          duration: "15 mins",
+          content: "Welcome to Data Analytics! In this module, we'll explore what data analytics is and why it's crucial in today's business world. Data analytics is the process of examining datasets to draw conclusions about the information they contain."
+        },
+        {
+          id: 2,
+          title: "Understanding Data Types",
+          type: "text",
+          content: "Data comes in various forms: Quantitative data (numerical) includes discrete data (counts) and continuous data (measurements). Qualitative data (categorical) includes nominal data (categories without order) and ordinal data (categories with order). Understanding these types is fundamental to choosing the right analysis methods."
+        },
+        {
+          id: 3,
+          title: "Excel Basics for Analysis",
+          type: "video",
+          duration: "25 mins",
+          content: "Excel is a powerful tool for data analysis. We'll cover formulas, pivot tables, and basic charting. Learn how to clean data, perform calculations, and create meaningful visualizations."
+        },
+        {
+          id: 4,
+          title: "Statistical Measures",
+          type: "text",
+          content: "Key statistical measures include: Mean (average), Median (middle value), Mode (most frequent value), Standard deviation (measure of spread), Variance (measure of variability). These measures help us understand our data's central tendency and distribution."
+        }
+      ],
+      quiz: {
+        title: "Data Analytics Fundamentals Quiz",
+        questions: [
+          {
+            id: 1,
+            question: "What is the difference between discrete and continuous data?",
+            type: "multiple-choice",
+            options: [
+              "Discrete data can be counted, continuous data can be measured",
+              "Discrete data is qualitative, continuous data is quantitative",
+              "There is no difference",
+              "Discrete data is always larger than continuous data"
+            ],
+            correctAnswer: 0
+          },
+          {
+            id: 2,
+            question: "Which measure of central tendency is least affected by outliers?",
+            type: "multiple-choice",
+            options: ["Mean", "Median", "Mode", "Range"],
+            correctAnswer: 1
+          },
+          {
+            id: 3,
+            question: "Excel pivot tables are used for:",
+            type: "multiple-choice",
+            options: [
+              "Data visualization only",
+              "Data summarization and analysis",
+              "Data entry only",
+              "Creating databases"
+            ],
+            correctAnswer: 1
+          }
+        ]
+      }
     },
     {
       id: 2,
@@ -64,7 +129,6 @@ const CourseLibrary = ({ userRole }: CourseLibraryProps) => {
       rating: 4.9,
       instructor: "Prof. Michael Torres",
       image: "https://images.unsplash.com/photo-1518186285589-2f7649de83e0?w=300&h=200&fit=crop",
-      price: 899,
       prerequisites: ["Python Programming", "Statistics", "Linear Algebra", "Basic Machine Learning"],
       learningObjectives: [
         "Implement machine learning algorithms from scratch",
@@ -85,7 +149,71 @@ const CourseLibrary = ({ userRole }: CourseLibraryProps) => {
         "Capstone Project"
       ],
       completionRate: 76,
-      certificates: true
+      certificates: true,
+      content: [
+        {
+          id: 1,
+          title: "Machine Learning Overview",
+          type: "video",
+          duration: "20 mins",
+          content: "Machine Learning is a subset of artificial intelligence that enables computers to learn and make decisions from data without explicit programming. We'll explore supervised, unsupervised, and reinforcement learning paradigms."
+        },
+        {
+          id: 2,
+          title: "Linear Regression Deep Dive",
+          type: "text",
+          content: "Linear regression finds the best line through data points. The equation y = mx + b represents this relationship. We minimize the sum of squared errors to find optimal parameters. Key concepts: gradient descent, cost function, and feature scaling."
+        },
+        {
+          id: 3,
+          title: "Neural Networks Fundamentals",
+          type: "video",
+          duration: "30 mins",
+          content: "Neural networks mimic the human brain's structure. Each neuron receives inputs, applies weights, adds bias, and passes through an activation function. Multiple layers create deep networks capable of complex pattern recognition."
+        },
+        {
+          id: 4,
+          title: "Model Evaluation Metrics",
+          type: "text",
+          content: "For classification: Accuracy, Precision, Recall, F1-score, ROC-AUC. For regression: MAE, MSE, RMSE, R-squared. Cross-validation helps assess model generalization. Understanding these metrics is crucial for model selection and improvement."
+        }
+      ],
+      quiz: {
+        title: "Advanced Data Science Quiz",
+        questions: [
+          {
+            id: 1,
+            question: "What is the main purpose of gradient descent?",
+            type: "multiple-choice",
+            options: [
+              "To increase model complexity",
+              "To minimize the cost function",
+              "To add more features",
+              "To reduce training time"
+            ],
+            correctAnswer: 1
+          },
+          {
+            id: 2,
+            question: "In a neural network, what does the activation function do?",
+            type: "multiple-choice",
+            options: [
+              "It determines the learning rate",
+              "It introduces non-linearity to the model",
+              "It calculates the cost function",
+              "It initializes the weights"
+            ],
+            correctAnswer: 1
+          },
+          {
+            id: 3,
+            question: "Which metric is best for imbalanced classification problems?",
+            type: "multiple-choice",
+            options: ["Accuracy", "F1-score", "MAE", "R-squared"],
+            correctAnswer: 1
+          }
+        ]
+      }
     },
     {
       id: 3,
@@ -99,7 +227,6 @@ const CourseLibrary = ({ userRole }: CourseLibraryProps) => {
       rating: 4.7,
       instructor: "Alex Rodriguez",
       image: "https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=300&h=200&fit=crop",
-      price: 1299,
       prerequisites: ["HTML/CSS Basics", "JavaScript Fundamentals"],
       learningObjectives: [
         "Build responsive web applications",
@@ -121,7 +248,71 @@ const CourseLibrary = ({ userRole }: CourseLibraryProps) => {
         "Full-Stack Project Portfolio"
       ],
       completionRate: 82,
-      certificates: true
+      certificates: true,
+      content: [
+        {
+          id: 1,
+          title: "Modern HTML & CSS",
+          type: "video",
+          duration: "18 mins",
+          content: "Modern web development starts with semantic HTML5 and CSS3. We'll explore flexbox, grid layout, and responsive design principles. Learn to create layouts that work across all devices."
+        },
+        {
+          id: 2,
+          title: "JavaScript ES6+ Features",
+          type: "text",
+          content: "ES6 introduced powerful features: Arrow functions, Template literals, Destructuring, Spread operator, Promises, Async/await. These features make JavaScript more expressive and easier to work with in modern applications."
+        },
+        {
+          id: 3,
+          title: "React Component Architecture",
+          type: "video",
+          duration: "25 mins",
+          content: "React components are the building blocks of modern web applications. Learn about functional components, hooks, props, and state management. Understanding component lifecycle and composition patterns is essential."
+        },
+        {
+          id: 4,
+          title: "RESTful API Design",
+          type: "text",
+          content: "REST (Representational State Transfer) principles guide API design. Use HTTP methods appropriately: GET (retrieve), POST (create), PUT (update), DELETE (remove). Proper status codes and resource naming create intuitive APIs."
+        }
+      ],
+      quiz: {
+        title: "Full-Stack Development Quiz",
+        questions: [
+          {
+            id: 1,
+            question: "What is the purpose of the virtual DOM in React?",
+            type: "multiple-choice",
+            options: [
+              "To make the app faster by avoiding real DOM manipulation",
+              "To store application state",
+              "To handle HTTP requests",
+              "To manage component lifecycle"
+            ],
+            correctAnswer: 0
+          },
+          {
+            id: 2,
+            question: "Which HTTP method should be used to update an existing resource?",
+            type: "multiple-choice",
+            options: ["GET", "POST", "PUT", "DELETE"],
+            correctAnswer: 2
+          },
+          {
+            id: 3,
+            question: "What is the main advantage of using arrow functions in JavaScript?",
+            type: "multiple-choice",
+            options: [
+              "They are faster to execute",
+              "They automatically bind 'this' context",
+              "They use less memory",
+              "They can only be used in classes"
+            ],
+            correctAnswer: 1
+          }
+        ]
+      }
     },
     {
       id: 4,
@@ -135,7 +326,6 @@ const CourseLibrary = ({ userRole }: CourseLibraryProps) => {
       rating: 4.6,
       instructor: "Emma Thompson",
       image: "https://images.unsplash.com/photo-1432888498266-38ffec3eaf0a?w=300&h=200&fit=crop",
-      price: 449,
       prerequisites: ["Basic Computer Skills", "Internet Familiarity"],
       learningObjectives: [
         "Develop comprehensive digital marketing strategies",
@@ -156,7 +346,66 @@ const CourseLibrary = ({ userRole }: CourseLibraryProps) => {
         "Campaign Management Project"
       ],
       completionRate: 91,
-      certificates: true
+      certificates: true,
+      content: [
+        {
+          id: 1,
+          title: "Introduction to Digital Marketing",
+          type: "video",
+          duration: "20 mins",
+          content: "Digital marketing is the promotion of products or brands via electronic media. We'll cover the basics and importance of digital marketing in today's business landscape."
+        },
+        {
+          id: 2,
+          title: "SEO Fundamentals",
+          type: "text",
+          content: "Search Engine Optimization (SEO) improves website visibility. Learn about keywords, on-page SEO, backlinks, and technical SEO to boost your site's ranking."
+        },
+        {
+          id: 3,
+          title: "Social Media Strategies",
+          type: "video",
+          duration: "25 mins",
+          content: "Effective social media marketing involves content creation, audience engagement, and analytics. We'll explore platforms like Facebook, Instagram, and LinkedIn."
+        },
+        {
+          id: 4,
+          title: "Analyzing Campaign Performance",
+          type: "text",
+          content: "Use tools like Google Analytics to measure campaign success. Understand metrics such as CTR, conversion rate, and ROI to optimize marketing efforts."
+        }
+      ],
+      quiz: {
+        title: "Digital Marketing Quiz",
+        questions: [
+          {
+            id: 1,
+            question: "What does SEO stand for?",
+            type: "multiple-choice",
+            options: [
+              "Search Engine Optimization",
+              "Social Engagement Online",
+              "Sales and Earnings Overview",
+              "Search Email Outreach"
+            ],
+            correctAnswer: 0
+          },
+          {
+            id: 2,
+            question: "Which platform is best for B2B marketing?",
+            type: "multiple-choice",
+            options: ["Facebook", "Instagram", "LinkedIn", "TikTok"],
+            correctAnswer: 2
+          },
+          {
+            id: 3,
+            question: "What metric measures the percentage of people who clicked an ad?",
+            type: "multiple-choice",
+            options: ["CTR", "ROI", "Bounce Rate", "Impressions"],
+            correctAnswer: 0
+          }
+        ]
+      }
     },
     {
       id: 5,
@@ -170,7 +419,6 @@ const CourseLibrary = ({ userRole }: CourseLibraryProps) => {
       rating: 4.8,
       instructor: "David Kim",
       image: "https://images.unsplash.com/photo-1488590528505-98d2b5aba04b?w=300&h=200&fit=crop",
-      price: 699,
       prerequisites: ["Programming Experience", "Basic Data Structures", "Object-Oriented Programming"],
       learningObjectives: [
         "Write clean, maintainable code",
@@ -191,7 +439,71 @@ const CourseLibrary = ({ userRole }: CourseLibraryProps) => {
         "Software Project Management"
       ],
       completionRate: 85,
-      certificates: true
+      certificates: true,
+      content: [
+        {
+          id: 1,
+          title: "Clean Code Basics",
+          type: "video",
+          duration: "20 mins",
+          content: "Writing clean code improves readability and maintainability. We'll cover naming conventions, functions, and formatting."
+        },
+        {
+          id: 2,
+          title: "Design Patterns Overview",
+          type: "text",
+          content: "Common design patterns include Singleton, Factory, Observer, and Strategy. These patterns solve recurring design problems."
+        },
+        {
+          id: 3,
+          title: "Test-Driven Development",
+          type: "video",
+          duration: "25 mins",
+          content: "TDD involves writing tests before code. Learn how to write unit tests and use testing frameworks."
+        },
+        {
+          id: 4,
+          title: "Agile Methodologies",
+          type: "text",
+          content: "Agile promotes iterative development and collaboration. Understand Scrum, Kanban, and sprint planning."
+        }
+      ],
+      quiz: {
+        title: "Software Development Principles Quiz",
+        questions: [
+          {
+            id: 1,
+            question: "What is the main benefit of clean code?",
+            type: "multiple-choice",
+            options: [
+              "Faster execution",
+              "Easier maintenance and readability",
+              "More features",
+              "Less memory usage"
+            ],
+            correctAnswer: 1
+          },
+          {
+            id: 2,
+            question: "Which design pattern ensures a class has only one instance?",
+            type: "multiple-choice",
+            options: ["Factory", "Singleton", "Observer", "Strategy"],
+            correctAnswer: 1
+          },
+          {
+            id: 3,
+            question: "What does TDD stand for?",
+            type: "multiple-choice",
+            options: [
+              "Test-Driven Development",
+              "Time-Dependent Design",
+              "Total Data Deployment",
+              "Technical Design Document"
+            ],
+            correctAnswer: 0
+          }
+        ]
+      }
     },
     {
       id: 6,
@@ -205,7 +517,6 @@ const CourseLibrary = ({ userRole }: CourseLibraryProps) => {
       rating: 4.9,
       instructor: "Lisa Park",
       image: "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=300&h=200&fit=crop",
-      price: 799,
       prerequisites: ["React.js Knowledge", "JavaScript ES6+", "Mobile Development Basics"],
       learningObjectives: [
         "Build cross-platform mobile applications",
@@ -226,7 +537,66 @@ const CourseLibrary = ({ userRole }: CourseLibraryProps) => {
         "Mobile App Portfolio Project"
       ],
       completionRate: 78,
-      certificates: true
+      certificates: true,
+      content: [
+        {
+          id: 1,
+          title: "React Native Setup",
+          type: "video",
+          duration: "15 mins",
+          content: "Set up your development environment for React Native on Windows, macOS, and Linux. Learn about Expo and CLI options."
+        },
+        {
+          id: 2,
+          title: "Navigation Basics",
+          type: "text",
+          content: "Learn to navigate between screens using React Navigation. Understand stack, tab, and drawer navigators."
+        },
+        {
+          id: 3,
+          title: "State Management",
+          type: "video",
+          duration: "20 mins",
+          content: "Manage app state using Context API and Redux. Learn best practices for state updates and performance."
+        },
+        {
+          id: 4,
+          title: "Publishing Apps",
+          type: "text",
+          content: "Prepare your app for publishing on App Store and Google Play. Learn about signing, building, and submission processes."
+        }
+      ],
+      quiz: {
+        title: "Mobile App Development Quiz",
+        questions: [
+          {
+            id: 1,
+            question: "What tool can be used to quickly start a React Native project?",
+            type: "multiple-choice",
+            options: ["Expo", "Create React App", "Next.js", "Gatsby"],
+            correctAnswer: 0
+          },
+          {
+            id: 2,
+            question: "Which library is commonly used for navigation in React Native?",
+            type: "multiple-choice",
+            options: ["React Router", "React Navigation", "Redux", "MobX"],
+            correctAnswer: 1
+          },
+          {
+            id: 3,
+            question: "What is the purpose of signing an app before publishing?",
+            type: "multiple-choice",
+            options: [
+              "To encrypt the app",
+              "To verify the developer's identity",
+              "To reduce app size",
+              "To improve performance"
+            ],
+            correctAnswer: 1
+          }
+        ]
+      }
     },
   ];
 
@@ -254,6 +624,26 @@ const CourseLibrary = ({ userRole }: CourseLibraryProps) => {
         return 'secondary';
     }
   };
+
+  const handleEnroll = (courseId: number) => {
+    if (!enrolledCourses.includes(courseId)) {
+      setEnrolledCourses([...enrolledCourses, courseId]);
+    }
+    const course = courses.find(c => c.id === courseId);
+    setViewingCourse(course);
+  };
+
+  const isEnrolled = (courseId: number) => enrolledCourses.includes(courseId);
+
+  if (viewingCourse) {
+    return (
+      <CourseContent 
+        course={viewingCourse} 
+        onBack={() => setViewingCourse(null)}
+        userRole={userRole}
+      />
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -341,9 +731,8 @@ const CourseLibrary = ({ userRole }: CourseLibraryProps) => {
               </div>
               
               <div className="flex items-center justify-between text-sm">
-                <div className="flex items-center space-x-1">
-                  <DollarSign className="h-4 w-4 text-green-600" />
-                  <span className="font-medium">${course.price}</span>
+                <div className="flex items-center space-x-1 text-green-600 font-medium">
+                  <span>FREE</span>
                 </div>
                 <div className="flex items-center space-x-1">
                   <CheckCircle className="h-4 w-4 text-blue-600" />
@@ -386,7 +775,6 @@ const CourseLibrary = ({ userRole }: CourseLibraryProps) => {
                             <div><strong>Duration:</strong> {course.duration}</div>
                             <div><strong>Students:</strong> {course.students}</div>
                             <div><strong>Rating:</strong> {course.rating}/5</div>
-                            <div><strong>Price:</strong> ${course.price}</div>
                             <div><strong>Completion Rate:</strong> {course.completionRate}%</div>
                             {course.certificates && (
                               <div className="flex items-center">
@@ -450,8 +838,11 @@ const CourseLibrary = ({ userRole }: CourseLibraryProps) => {
                   </DialogContent>
                 </Dialog>
                 
-                <Button className="flex-1 bg-blue-600 hover:bg-blue-700">
-                  {userRole === 'learner' ? 'Enroll Now' : userRole === 'educator' ? 'View Course' : 'Manage Course'}
+                <Button 
+                  className="flex-1 bg-blue-600 hover:bg-blue-700"
+                  onClick={() => handleEnroll(course.id)}
+                >
+                  {isEnrolled(course.id) ? 'Continue Learning' : 'Enroll Now'}
                 </Button>
               </div>
             </CardContent>
