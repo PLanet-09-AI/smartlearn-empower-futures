@@ -5,14 +5,142 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { ArrowLeft, Play, FileText, CheckCircle, Clock, Award, Volume2, VolumeX } from "lucide-react";
 import { speakText, stopSpeaking, isSpeechSupported } from "@/utils/textToSpeech";
+import { Course } from "@/types";
 
 interface CourseContentProps {
-  course: any;
+  courseId: number;
   onBack: () => void;
   userRole: 'learner' | 'educator' | 'admin';
 }
 
-const CourseContent = ({ course, onBack, userRole }: CourseContentProps) => {
+const CourseContent = ({ courseId, onBack, userRole }: CourseContentProps) => {
+  // Mock course data - in a real app this would come from an API
+  const courses: Course[] = [
+    {
+      id: 1,
+      title: "Introduction to Web Development",
+      description: "Learn the fundamentals of HTML, CSS, and JavaScript to build modern web applications.",
+      category: "Programming",
+      level: "Beginner",
+      duration: "6 weeks",
+      rating: 4.8,
+      students: 1234,
+      instructor: "Sarah Johnson",
+      thumbnail: "/placeholder.svg?height=200&width=300",
+      content: [
+        {
+          id: 1,
+          title: "What is Web Development?",
+          type: "text",
+          duration: "10 min",
+          content: `Web development is the process of creating websites and web applications that run on the internet or intranet. It involves several aspects including web design, web content development, client-side/server-side scripting, and network security configuration.
+
+There are three main types of web development:
+
+1. Front-end Development: This involves creating the visual and interactive elements that users see and interact with directly. Technologies include HTML (structure), CSS (styling), and JavaScript (interactivity).
+
+2. Back-end Development: This involves server-side programming, databases, and application architecture. Common technologies include Python, Java, PHP, Node.js, and databases like MySQL or MongoDB.
+
+3. Full-stack Development: This combines both front-end and back-end development skills, allowing developers to work on complete web applications.
+
+Modern web development also includes concepts like responsive design (making websites work on all devices), web accessibility (ensuring websites are usable by people with disabilities), and performance optimization (making websites load fast).
+
+The field is constantly evolving with new frameworks, tools, and best practices emerging regularly. Popular frameworks today include React, Angular, Vue.js for front-end, and Express.js, Django, Ruby on Rails for back-end development.`
+        },
+        {
+          id: 2,
+          title: "HTML Fundamentals",
+          type: "video",
+          duration: "25 min",
+          videoUrl: "https://www.w3schools.com/html/mov_bbb.mp4",
+          content: "Learn the structure and syntax of HTML, the markup language that forms the backbone of web pages."
+        },
+        {
+          id: 3,
+          title: "CSS Styling Basics",
+          type: "text",
+          duration: "15 min",
+          content: `CSS (Cascading Style Sheets) is used to style and layout web pages. It controls the visual presentation of HTML elements.
+
+Key CSS Concepts:
+
+1. Selectors: These target HTML elements to apply styles. Examples include:
+   - Element selectors: p, h1, div
+   - Class selectors: .my-class
+   - ID selectors: #my-id
+
+2. Properties and Values: CSS properties define what aspect to style, and values specify how:
+   - color: blue;
+   - font-size: 16px;
+   - margin: 10px;
+
+3. Box Model: Every HTML element is a rectangular box with:
+   - Content: The actual content
+   - Padding: Space between content and border
+   - Border: The edge of the element
+   - Margin: Space outside the border
+
+4. Layout: CSS provides several layout methods:
+   - Flexbox: For one-dimensional layouts
+   - Grid: For two-dimensional layouts
+   - Float: Older method, still useful for text wrapping
+
+5. Responsive Design: Making websites work on all screen sizes using:
+   - Media queries
+   - Flexible units (%, em, rem, vw, vh)
+   - Flexible layouts
+
+Best practices include organizing CSS with meaningful class names, avoiding inline styles, and using external stylesheets for maintainability.`
+        },
+        {
+          id: 4,
+          title: "JavaScript Introduction",
+          type: "video",
+          duration: "30 min",
+          videoUrl: "https://www.w3schools.com/html/mov_bbb.mp4",
+          content: "Introduction to JavaScript programming language and its role in web development."
+        }
+      ],
+      quiz: {
+        title: "Web Development Fundamentals Quiz",
+        questions: [
+          {
+            id: 1,
+            question: "What does HTML stand for?",
+            options: ["Hyper Text Markup Language", "High Tech Modern Language", "Home Tool Markup Language", "Hyperlink and Text Markup Language"],
+            correctAnswer: 0
+          },
+          {
+            id: 2,
+            question: "Which of the following is used for styling web pages?",
+            options: ["HTML", "CSS", "JavaScript", "Python"],
+            correctAnswer: 1
+          },
+          {
+            id: 3,
+            question: "What are the three main types of web development?",
+            options: ["HTML, CSS, JavaScript", "Client, Server, Database", "Front-end, Back-end, Full-stack", "Design, Development, Deployment"],
+            correctAnswer: 2
+          }
+        ]
+      }
+    },
+    // ... keep existing code (other courses from CourseLibrary)
+  ];
+
+  const course = courses.find(c => c.id === courseId);
+
+  if (!course) {
+    return (
+      <div className="max-w-4xl mx-auto p-6">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold mb-4">Course not found</h2>
+          <Button onClick={onBack}>Back to Courses</Button>
+        </div>
+      </div>
+    );
+  }
+
   const [currentContentIndex, setCurrentContentIndex] = useState(0);
   const [completedContent, setCompletedContent] = useState<number[]>([]);
   const [showQuiz, setShowQuiz] = useState(false);

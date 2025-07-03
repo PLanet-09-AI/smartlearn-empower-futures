@@ -1,4 +1,3 @@
-
 import { BookOpen, Users, BarChart3, Settings, Award, Clock, TrendingUp, Plus } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -6,6 +5,7 @@ import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import CourseLibrary from "@/components/CourseLibrary";
 import CourseManagement from "@/components/CourseManagement";
+import CourseContent from "@/components/CourseContent";
 import { useState } from "react";
 
 interface DashboardProps {
@@ -14,6 +14,17 @@ interface DashboardProps {
 
 const Dashboard = ({ userRole }: DashboardProps) => {
   const [activeTab, setActiveTab] = useState('overview');
+  const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
+
+  const handleCourseSelect = (courseId: number) => {
+    setSelectedCourseId(courseId);
+    setActiveTab('course-content');
+  };
+
+  const handleBackToCourses = () => {
+    setSelectedCourseId(null);
+    setActiveTab('courses');
+  };
 
   const getWelcomeMessage = () => {
     switch (userRole) {
@@ -223,21 +234,23 @@ const Dashboard = ({ userRole }: DashboardProps) => {
       </div>
 
       {/* Navigation Tabs */}
-      <div className="flex space-x-6 mb-6 border-b border-gray-200">
-        {getTabsForRole().map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
-              activeTab === tab.id
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      {activeTab !== 'course-content' && (
+        <div className="flex space-x-6 mb-6 border-b border-gray-200">
+          {getTabsForRole().map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
+                activeTab === tab.id
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Tab Content */}
       {activeTab === 'overview' && (
@@ -343,10 +356,20 @@ const Dashboard = ({ userRole }: DashboardProps) => {
         </div>
       )}
 
-      {activeTab === 'courses' && <CourseLibrary userRole={userRole} />}
+      {activeTab === 'courses' && (
+        <CourseLibrary userRole={userRole} onCourseSelect={handleCourseSelect} />
+      )}
       
       {activeTab === 'manage' && (userRole === 'educator' || userRole === 'admin') && (
         <CourseManagement userRole={userRole} />
+      )}
+
+      {activeTab === 'course-content' && selectedCourseId && (
+        <CourseContent 
+          courseId={selectedCourseId} 
+          onBack={handleBackToCourses}
+          userRole={userRole}
+        />
       )}
     </div>
   );
