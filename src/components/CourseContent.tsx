@@ -325,15 +325,20 @@ const CourseContent = ({ courseId, onBack, userRole }: CourseContentProps) => {
             <CardContent className="space-y-6">
               {currentContent.type === 'video' ? (
                 <div className="aspect-video bg-gray-900 rounded-lg overflow-hidden">
-                  <video
+                  <iframe
                     className="w-full h-full"
-                    controls
-                    onEnded={handleVideoEnded}
-                    onPlay={() => setVideoEnded(false)}
-                  >
-                    <source src={currentContent.videoUrl} type="video/mp4" />
-                    Your browser does not support the video tag.
-                  </video>
+                    src={currentContent.videoUrl}
+                    title={currentContent.title}
+                    frameBorder="0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                    onLoad={() => {
+                      // Mark video as completed after a delay to simulate watching
+                      setTimeout(() => {
+                        handleVideoEnded();
+                      }, 2000);
+                    }}
+                  ></iframe>
                 </div>
               ) : (
                 <div className="prose max-w-none">

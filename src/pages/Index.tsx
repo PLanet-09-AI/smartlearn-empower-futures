@@ -23,13 +23,21 @@ const Index = () => {
       <Header 
         isLoggedIn={!!currentUser} 
         onLogout={logout}
-        onBackToHome={!currentUser ? handleBackToHome : undefined}
-        showBackButton={!currentUser && showLogin}
       />
       
       {!currentUser ? (
         showLogin ? (
-          <LoginForm />
+          <div>
+            <div className="p-4">
+              <button 
+                onClick={handleBackToHome}
+                className="text-blue-600 hover:text-blue-800 font-medium"
+              >
+                ← Back to Home
+              </button>
+            </div>
+            <LoginForm />
+          </div>
         ) : (
           <Homepage onGetStarted={handleGetStarted} />
         )

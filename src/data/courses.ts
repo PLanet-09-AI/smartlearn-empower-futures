@@ -38,7 +38,7 @@ The field is constantly evolving with new frameworks, tools, and best practices 
         title: "HTML Fundamentals",
         type: "video",
         duration: "25 min",
-        videoUrl: "https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_1mb.mp4",
+        videoUrl: "https://www.youtube.com/embed/UB1O30fR-EE",
         content: "Learn the structure and syntax of HTML, the markup language that forms the backbone of web pages."
       },
       {
@@ -83,7 +83,7 @@ Best practices include organizing CSS with meaningful class names, avoiding inli
         title: "JavaScript Introduction",
         type: "video",
         duration: "30 min",
-        videoUrl: "https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_2mb.mp4",
+        videoUrl: "https://www.youtube.com/embed/PkZNo7MFNFg",
         content: "Introduction to JavaScript programming language and its role in web development."
       }
     ],
@@ -159,7 +159,7 @@ Data science applications span across industries including healthcare, finance, 
         title: "Python for Data Science",
         type: "video",
         duration: "35 min",
-        videoUrl: "https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_5mb.mp4",
+        videoUrl: "https://www.youtube.com/embed/LHBE6Q9XlzI",
         content: "Learn Python fundamentals and essential libraries like NumPy, Pandas, and Matplotlib for data analysis."
       },
       {
@@ -205,7 +205,7 @@ Best Practices:
         title: "Machine Learning Basics",
         type: "video",
         duration: "40 min",
-        videoUrl: "https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_7mb.mp4",
+        videoUrl: "https://www.youtube.com/embed/ukzFI9rgwfU",
         content: "Introduction to machine learning algorithms, supervised and unsupervised learning, and practical applications."
       },
       {
@@ -356,7 +356,7 @@ Key Metrics to Track:
         title: "SEO Fundamentals",
         type: "video",
         duration: "30 min",
-        videoUrl: "https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_3mb.mp4",
+        videoUrl: "https://www.youtube.com/embed/xsVTqzratPs",
         content: "Learn the basics of Search Engine Optimization, keyword research, and on-page optimization techniques."
       },
       {
@@ -415,7 +415,7 @@ Content Creation Tips:
         title: "Content Marketing Strategy",
         type: "video",
         duration: "28 min",
-        videoUrl: "https://sample-videos.com/zip/10/mp4/SampleVideo_1280x720_4mb.mp4",
+        videoUrl: "https://www.youtube.com/embed/B9zSAd1MRxw",
         content: "Develop effective content marketing strategies that engage audiences and drive conversions."
       },
       {
