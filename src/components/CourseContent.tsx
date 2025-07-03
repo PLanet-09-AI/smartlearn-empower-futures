@@ -1,10 +1,10 @@
-
 import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, Play, FileText, CheckCircle, Clock, Award } from "lucide-react";
+import { ArrowLeft, Play, FileText, CheckCircle, Clock, Award, Volume2, VolumeX } from "lucide-react";
+import { speakText, stopSpeaking, isSpeechSupported } from "@/utils/textToSpeech";
 
 interface CourseContentProps {
   course: any;
@@ -19,9 +19,26 @@ const CourseContent = ({ course, onBack, userRole }: CourseContentProps) => {
   const [quizAnswers, setQuizAnswers] = useState<number[]>([]);
   const [quizCompleted, setQuizCompleted] = useState(false);
   const [quizScore, setQuizScore] = useState(0);
+  const [isSpeaking, setIsSpeaking] = useState(false);
 
   const currentContent = course.content[currentContentIndex];
   const progress = (completedContent.length / course.content.length) * 100;
+  const speechSupported = isSpeechSupported();
+
+  const handleSpeak = (text: string) => {
+    if (isSpeaking) {
+      stopSpeaking();
+      setIsSpeaking(false);
+    } else {
+      speakText(text);
+      setIsSpeaking(true);
+      
+      // Reset speaking state when speech ends
+      setTimeout(() => {
+        setIsSpeaking(false);
+      }, text.length * 50); // Rough estimate of speech duration
+    }
+  };
 
   const markContentComplete = () => {
     if (!completedContent.includes(currentContent.id)) {
@@ -77,10 +94,21 @@ const CourseContent = ({ course, onBack, userRole }: CourseContentProps) => {
 
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center">
-              <Award className="h-5 w-5 mr-2 text-yellow-500" />
-              {course.quiz.title}
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center">
+                <Award className="h-5 w-5 mr-2 text-yellow-500" />
+                {course.quiz.title}
+              </CardTitle>
+              {speechSupported && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleSpeak(`Quiz: ${course.quiz.title}. Test your knowledge of the course material.`)}
+                >
+                  {isSpeaking ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                </Button>
+              )}
+            </div>
             <CardDescription>
               Test your knowledge of the course material
             </CardDescription>
@@ -90,9 +118,20 @@ const CourseContent = ({ course, onBack, userRole }: CourseContentProps) => {
               <>
                 {course.quiz.questions.map((question: any, questionIndex: number) => (
                   <div key={question.id} className="space-y-4">
-                    <h3 className="font-medium">
-                      Question {questionIndex + 1}: {question.question}
-                    </h3>
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-medium">
+                        Question {questionIndex + 1}: {question.question}
+                      </h3>
+                      {speechSupported && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleSpeak(`Question ${questionIndex + 1}: ${question.question}. ${question.options.join('. ')}`)}
+                        >
+                          <Volume2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
                     <div className="space-y-2">
                       {question.options.map((option: string, optionIndex: number) => (
                         <label 
@@ -233,6 +272,16 @@ const CourseContent = ({ course, onBack, userRole }: CourseContentProps) => {
               <div className="flex items-center justify-between">
                 <CardTitle>{currentContent.title}</CardTitle>
                 <div className="flex items-center space-x-2">
+                  {speechSupported && currentContent.type === 'text' && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleSpeak(`${currentContent.title}. ${currentContent.content}`)}
+                      title="Listen to content"
+                    >
+                      {isSpeaking ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                    </Button>
+                  )}
                   {currentContent.type === 'video' ? (
                     <Play className="h-4 w-4" />
                   ) : (
@@ -259,7 +308,20 @@ const CourseContent = ({ course, onBack, userRole }: CourseContentProps) => {
               ) : (
                 <div className="prose max-w-none">
                   <div className="bg-gray-50 p-6 rounded-lg">
-                    <FileText className="h-8 w-8 text-blue-600 mb-4" />
+                    <div className="flex items-center justify-between mb-4">
+                      <FileText className="h-8 w-8 text-blue-600" />
+                      {speechSupported && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleSpeak(currentContent.content)}
+                          title="Listen to this content"
+                        >
+                          {isSpeaking ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                          <span className="ml-1 text-xs">Listen</span>
+                        </Button>
+                      )}
+                    </div>
                     <div className="whitespace-pre-line text-gray-700 leading-relaxed">
                       {currentContent.content}
                     </div>
