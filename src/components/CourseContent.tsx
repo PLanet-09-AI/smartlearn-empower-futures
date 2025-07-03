@@ -20,6 +20,7 @@ const CourseContent = ({ course, onBack, userRole }: CourseContentProps) => {
   const [quizCompleted, setQuizCompleted] = useState(false);
   const [quizScore, setQuizScore] = useState(0);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [videoEnded, setVideoEnded] = useState(false);
 
   const currentContent = course.content[currentContentIndex];
   const progress = (completedContent.length / course.content.length) * 100;
@@ -50,6 +51,7 @@ const CourseContent = ({ course, onBack, userRole }: CourseContentProps) => {
     markContentComplete();
     if (currentContentIndex < course.content.length - 1) {
       setCurrentContentIndex(currentContentIndex + 1);
+      setVideoEnded(false);
     } else {
       setShowQuiz(true);
     }
@@ -58,7 +60,13 @@ const CourseContent = ({ course, onBack, userRole }: CourseContentProps) => {
   const prevContent = () => {
     if (currentContentIndex > 0) {
       setCurrentContentIndex(currentContentIndex - 1);
+      setVideoEnded(false);
     }
+  };
+
+  const handleVideoEnded = () => {
+    setVideoEnded(true);
+    markContentComplete();
   };
 
   const handleQuizAnswer = (questionIndex: number, answerIndex: number) => {
@@ -231,7 +239,10 @@ const CourseContent = ({ course, onBack, userRole }: CourseContentProps) => {
                   className={`flex items-center space-x-2 p-2 rounded cursor-pointer text-sm ${
                     index === currentContentIndex ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-50'
                   }`}
-                  onClick={() => setCurrentContentIndex(index)}
+                  onClick={() => {
+                    setCurrentContentIndex(index);
+                    setVideoEnded(false);
+                  }}
                 >
                   {content.type === 'video' ? (
                     <Play className="h-4 w-4" />
@@ -298,12 +309,16 @@ const CourseContent = ({ course, onBack, userRole }: CourseContentProps) => {
             </CardHeader>
             <CardContent className="space-y-6">
               {currentContent.type === 'video' ? (
-                <div className="aspect-video bg-gray-900 rounded-lg flex items-center justify-center">
-                  <div className="text-center text-white">
-                    <Play className="h-16 w-16 mx-auto mb-4" />
-                    <p className="text-lg font-medium">{currentContent.title}</p>
-                    <p className="text-sm opacity-75">{currentContent.duration}</p>
-                  </div>
+                <div className="aspect-video bg-gray-900 rounded-lg overflow-hidden">
+                  <video
+                    className="w-full h-full"
+                    controls
+                    onEnded={handleVideoEnded}
+                    onPlay={() => setVideoEnded(false)}
+                  >
+                    <source src={currentContent.videoUrl} type="video/mp4" />
+                    Your browser does not support the video tag.
+                  </video>
                 </div>
               ) : (
                 <div className="prose max-w-none">
@@ -345,6 +360,7 @@ const CourseContent = ({ course, onBack, userRole }: CourseContentProps) => {
                 <Button 
                   onClick={nextContent}
                   className="bg-blue-600 hover:bg-blue-700"
+                  disabled={currentContent.type === 'video' && !videoEnded && !completedContent.includes(currentContent.id)}
                 >
                   {currentContentIndex === course.content.length - 1 ? 'Take Quiz' : 'Next'}
                 </Button>
