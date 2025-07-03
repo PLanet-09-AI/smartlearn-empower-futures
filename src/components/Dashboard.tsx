@@ -7,6 +7,7 @@ import CourseLibrary from "@/components/CourseLibrary";
 import CourseManagement from "@/components/CourseManagement";
 import CourseContent from "@/components/CourseContent";
 import { useState } from "react";
+import VoiceCommand from "@/components/VoiceCommand";
 
 interface DashboardProps {
   userRole: 'learner' | 'educator' | 'admin';
@@ -24,6 +25,18 @@ const Dashboard = ({ userRole }: DashboardProps) => {
   const handleBackToCourses = () => {
     setSelectedCourseId(null);
     setActiveTab('courses');
+  };
+
+  const handleVoiceCommand = (command: string) => {
+    const lowerCommand = command.toLowerCase();
+    
+    if (lowerCommand.includes('course') || lowerCommand.includes('library')) {
+      setActiveTab('courses');
+    } else if (lowerCommand.includes('manage') && (userRole === 'educator' || userRole === 'admin')) {
+      setActiveTab('manage');
+    } else if (lowerCommand.includes('overview') || lowerCommand.includes('dashboard')) {
+      setActiveTab('overview');
+    }
   };
 
   const getWelcomeMessage = () => {
@@ -228,9 +241,19 @@ const Dashboard = ({ userRole }: DashboardProps) => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">{getWelcomeMessage()}</h1>
-        <p className="text-gray-600">Track your progress and explore new learning opportunities.</p>
+      <div className="mb-8 flex justify-between items-start">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">{getWelcomeMessage()}</h1>
+          <p className="text-gray-600">Track your progress and explore new learning opportunities.</p>
+        </div>
+        <VoiceCommand 
+          onCommand={handleVoiceCommand}
+          commands={{
+            'create course': () => userRole !== 'learner' && setActiveTab('manage'),
+            'new course': () => userRole !== 'learner' && setActiveTab('manage'),
+          }}
+          className="hidden sm:flex"
+        />
       </div>
 
       {/* Navigation Tabs */}
