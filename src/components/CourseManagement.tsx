@@ -7,37 +7,39 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Edit, Trash2, Eye, Users, Clock, BookOpen, FileQuestion } from "lucide-react";
+import { Plus, Edit, Trash2, Eye, Users, Clock, BookOpen, FileQuestion, Video, FileText, Upload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { courses as initialCourses } from "@/data/courses";
 
-interface Course {
+interface CourseContent {
   id: string;
   title: string;
+  type: 'video' | 'text' | 'pdf';
+  content: string;
+  order: number;
+  videoId?: string; // YouTube video ID
+}
+
+interface Course {
+  id: number;
+  title: string;
   description: string;
-  fullDescription: string;
+  fullDescription?: string;
   category: string;
   level: string;
   duration: string;
   students: number;
   rating: number;
   instructor: string;
-  image: string;
-  price: number;
-  prerequisites: string[];
-  learningObjectives: string[];
-  curriculum: string[];
-  status: 'draft' | 'published' | 'archived';
-  createdAt: Date;
-  updatedAt: Date;
+  thumbnail: string;
+  price?: number;
+  prerequisites?: string[];
+  learningObjectives?: string[];
+  curriculum?: string[];
+  status?: 'draft' | 'published' | 'archived';
+  createdAt?: Date;
+  updatedAt?: Date;
   content?: CourseContent[];
-}
-
-interface CourseContent {
-  id: string;
-  title: string;
-  type: 'video' | 'text' | 'pdf' | 'quiz';
-  content: string;
-  order: number;
 }
 
 interface Quiz {
@@ -64,18 +66,20 @@ interface QuizQuestion {
 
 interface CourseManagementProps {
   userRole: 'educator' | 'admin';
+  onCoursesUpdate?: (courses: Course[]) => void;
 }
 
-const CourseManagement = ({ userRole }: CourseManagementProps) => {
-  const [courses, setCourses] = useState<Course[]>([]);
+const CourseManagement = ({ userRole, onCoursesUpdate }: CourseManagementProps) => {
+  const [courses, setCourses] = useState<Course[]>(initialCourses);
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isQuizDialogOpen, setIsQuizDialogOpen] = useState(false);
+  const [isContentDialogOpen, setIsContentDialogOpen] = useState(false);
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
   const [editingQuiz, setEditingQuiz] = useState<Quiz | null>(null);
   const [viewingCourse, setViewingCourse] = useState<Course | null>(null);
-  const [selectedCourseForQuiz, setSelectedCourseForQuiz] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'courses' | 'quizzes'>('courses');
+  const [selectedCourseForContent, setSelectedCourseForContent] = useState<string>('');
+  const [activeTab, setActiveTab] = useState<'courses' | 'quizzes' | 'content'>('courses');
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -86,12 +90,21 @@ const CourseManagement = ({ userRole }: CourseManagementProps) => {
     level: '',
     duration: '',
     instructor: '',
-    image: '',
+    thumbnail: '',
     price: 0,
     prerequisites: '',
     learningObjectives: '',
     curriculum: '',
-    status: 'draft' as 'draft' | 'published' | 'archived'
+    status: 'draft' as 'draft' | 'published' | 'archived',
+    content: [] as CourseContent[]
+  });
+
+  const [contentFormData, setContentFormData] = useState({
+    title: '',
+    type: 'video' as 'video' | 'text' | 'pdf',
+    content: '',
+    youtubeUrl: '',
+    order: 1
   });
 
   const [quizFormData, setQuizFormData] = useState({
@@ -107,173 +120,8 @@ const CourseManagement = ({ userRole }: CourseManagementProps) => {
   const categories = ["Data Analytics", "Data Science", "Web Development", "Digital Marketing", "Software Development", "Mobile Development"];
   const levels = ["Beginner", "Intermediate", "Advanced"];
 
-  // Enhanced mock data with actual course content
+  // Mock quizzes data
   useEffect(() => {
-    const mockCourses: Course[] = [
-      {
-        id: "1",
-        title: "Data Analytics Fundamentals",
-        description: "Learn the basics of data analysis, visualization, and interpretation using modern tools and techniques.",
-        fullDescription: "This comprehensive course introduces students to the world of data analytics. You'll learn to collect, process, and analyze data using industry-standard tools like Excel, Python, and SQL. The course covers statistical analysis, data visualization, and practical applications in business intelligence.",
-        category: "Data Analytics",
-        level: "Beginner",
-        duration: "8 weeks",
-        students: 245,
-        rating: 4.8,
-        instructor: "Dr. Sarah Chen",
-        image: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=300&h=200&fit=crop",
-        price: 299,
-        prerequisites: ["Basic Mathematics", "Computer Literacy"],
-        learningObjectives: [
-          "Understand fundamental data analysis concepts",
-          "Create compelling data visualizations",
-          "Perform statistical analysis on datasets",
-          "Build interactive dashboards"
-        ],
-        curriculum: [
-          "Introduction to Data Analytics",
-          "Excel for Data Analysis",
-          "Introduction to Python/R",
-          "Statistical Analysis Fundamentals",
-          "Data Visualization Techniques",
-          "Business Intelligence Basics",
-          "Final Project: Real-world Analysis"
-        ],
-        status: 'published',
-        createdAt: new Date('2024-01-15'),
-        updatedAt: new Date('2024-06-20'),
-        content: [
-          {
-            id: "c1-1",
-            title: "What is Data Analytics?",
-            type: "text",
-            content: "Data analytics is the science of analyzing raw data to make conclusions about information. It involves applying an algorithmic or mechanical process to derive insights from data. Data analytics is used in many industries to allow companies and organizations to make better business decisions.",
-            order: 1
-          },
-          {
-            id: "c1-2", 
-            title: "Introduction to Data Analytics",
-            type: "video",
-            content: "https://www.youtube.com/embed/yZvFH7B6gKI",
-            order: 2
-          },
-          {
-            id: "c1-3",
-            title: "Types of Data Analysis",
-            type: "text",
-            content: "There are four main types of data analysis: 1. Descriptive Analysis - What happened? 2. Diagnostic Analysis - Why did it happen? 3. Predictive Analysis - What will happen? 4. Prescriptive Analysis - What should we do?",
-            order: 3
-          }
-        ]
-      },
-      {
-        id: "2",
-        title: "Full-Stack Web Development",
-        description: "Master modern web development with React, Node.js, and database technologies.",
-        fullDescription: "Complete bootcamp covering frontend and backend development. Learn HTML5, CSS3, JavaScript ES6+, React.js, Node.js, Express.js, MongoDB, and deployment strategies.",
-        category: "Web Development",
-        level: "Intermediate",
-        duration: "12 weeks",
-        students: 186,
-        rating: 4.9,
-        instructor: "Alex Rodriguez",
-        image: "https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=300&h=200&fit=crop",
-        price: 799,
-        prerequisites: ["HTML/CSS Basics", "JavaScript Fundamentals"],
-        learningObjectives: [
-          "Build responsive web applications",
-          "Develop RESTful APIs",
-          "Implement user authentication",
-          "Deploy applications to cloud platforms"
-        ],
-        curriculum: [
-          "Advanced HTML/CSS",
-          "JavaScript ES6+ Features",
-          "React.js Fundamentals",
-          "State Management",
-          "Node.js & Express.js",
-          "Database Integration",
-          "Authentication & Security",
-          "Deployment & DevOps"
-        ],
-        status: 'published',
-        createdAt: new Date('2024-02-01'),
-        updatedAt: new Date('2024-06-25'),
-        content: [
-          {
-            id: "c2-1",
-            title: "Modern Web Development Overview",
-            type: "text",
-            content: "Modern web development has evolved significantly. Today's web applications are complex, interactive, and require knowledge of multiple technologies including frontend frameworks, backend APIs, databases, and cloud deployment.",
-            order: 1
-          },
-          {
-            id: "c2-2",
-            title: "HTML5 & CSS3 Advanced Features",
-            type: "video", 
-            content: "https://www.youtube.com/embed/UB1O30fR-EE",
-            order: 2
-          },
-          {
-            id: "c2-3",
-            title: "JavaScript ES6+ Crash Course",
-            type: "text",
-            content: "ES6+ introduced many powerful features: Arrow functions, Template literals, Destructuring, Promises, Async/Await, Classes, Modules, and more. These features make JavaScript more powerful and easier to work with.",
-            order: 3
-          }
-        ]
-      },
-      {
-        id: "3",
-        title: "Digital Marketing Mastery",
-        description: "Comprehensive digital marketing course covering SEO, social media, PPC, and analytics.",
-        fullDescription: "Learn all aspects of digital marketing from search engine optimization to social media marketing, pay-per-click advertising, email marketing, and conversion optimization.",
-        category: "Digital Marketing",
-        level: "Beginner",
-        duration: "6 weeks",
-        students: 324,
-        rating: 4.7,
-        instructor: "Maria Santos",
-        image: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=300&h=200&fit=crop",
-        price: 399,
-        prerequisites: ["Basic Computer Skills"],
-        learningObjectives: [
-          "Develop comprehensive marketing strategies",
-          "Master SEO and content marketing",
-          "Create effective social media campaigns",
-          "Analyze marketing performance"
-        ],
-        curriculum: [
-          "Digital Marketing Fundamentals",
-          "Search Engine Optimization",
-          "Content Marketing Strategy",
-          "Social Media Marketing",
-          "Pay-Per-Click Advertising",
-          "Email Marketing",
-          "Analytics & Measurement"
-        ],
-        status: 'published',
-        createdAt: new Date('2024-01-20'),
-        updatedAt: new Date('2024-06-30'),
-        content: [
-          {
-            id: "c3-1",
-            title: "Digital Marketing Landscape",
-            type: "text",
-            content: "Digital marketing encompasses all marketing efforts that use electronic devices or the internet. It includes channels such as search engines, social media, email, and websites to connect with current and prospective customers.",
-            order: 1
-          },
-          {
-            id: "c3-2",
-            title: "SEO Fundamentals",
-            type: "video",
-            content: "https://www.youtube.com/embed/xsVTqzratPs",
-            order: 2
-          }
-        ]
-      }
-    ];
-
     const mockQuizzes: Quiz[] = [
       {
         id: "q1",
@@ -298,26 +146,66 @@ const CourseManagement = ({ userRole }: CourseManagementProps) => {
             correctAnswer: 1,
             explanation: "Data analytics is the science of analyzing raw data to make conclusions about information.",
             points: 10
-          },
-          {
-            id: "q1-2",
-            question: "Data analytics can help businesses make better decisions.",
-            type: "true-false",
-            options: ["True", "False"],
-            correctAnswer: 0,
-            explanation: "Yes, data analytics helps organizations make informed business decisions based on data insights.",
-            points: 10
           }
         ]
       }
     ];
-
-    setCourses(mockCourses);
     setQuizzes(mockQuizzes);
   }, []);
 
+  // Update parent component when courses change
+  useEffect(() => {
+    if (onCoursesUpdate) {
+      onCoursesUpdate(courses);
+    }
+  }, [courses, onCoursesUpdate]);
+
+  const extractYouTubeVideoId = (url: string): string => {
+    const regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/;
+    const match = url.match(regExp);
+    return (match && match[7].length === 11) ? match[7] : '';
+  };
+
+  const addContentToCourse = () => {
+    const newContent: CourseContent = {
+      id: Date.now().toString(),
+      title: contentFormData.title,
+      type: contentFormData.type,
+      content: contentFormData.type === 'video' ? 
+        `https://www.youtube.com/embed/${extractYouTubeVideoId(contentFormData.youtubeUrl)}` : 
+        contentFormData.content,
+      order: contentFormData.order,
+      videoId: contentFormData.type === 'video' ? extractYouTubeVideoId(contentFormData.youtubeUrl) : undefined
+    };
+
+    setFormData(prev => ({
+      ...prev,
+      content: [...prev.content, newContent].sort((a, b) => a.order - b.order)
+    }));
+
+    // Reset content form
+    setContentFormData({
+      title: '',
+      type: 'video',
+      content: '',
+      youtubeUrl: '',
+      order: formData.content.length + 2
+    });
+  };
+
+  const removeContentFromCourse = (contentId: string) => {
+    setFormData(prev => ({
+      ...prev,
+      content: prev.content.filter(c => c.id !== contentId)
+    }));
+  };
+
   const handleInputChange = (field: string, value: string | number) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleContentInputChange = (field: string, value: string | number) => {
+    setContentFormData(prev => ({ ...prev, [field]: value }));
   };
 
   const handleQuizInputChange = (field: string, value: string | number) => {
@@ -328,7 +216,7 @@ const CourseManagement = ({ userRole }: CourseManagementProps) => {
     e.preventDefault();
     
     const courseData: Course = {
-      id: editingCourse?.id || Date.now().toString(),
+      id: editingCourse?.id || Date.now(),
       title: formData.title,
       description: formData.description,
       fullDescription: formData.fullDescription,
@@ -336,16 +224,17 @@ const CourseManagement = ({ userRole }: CourseManagementProps) => {
       level: formData.level,
       duration: formData.duration,
       instructor: formData.instructor,
-      image: formData.image || "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=300&h=200&fit=crop",
+      thumbnail: formData.thumbnail || "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=300&h=200&fit=crop",
       price: formData.price,
-      prerequisites: formData.prerequisites.split(',').map(p => p.trim()),
+      prerequisites: formData.prerequisites.split(',').map(p => p.trim()).filter(p => p),
       learningObjectives: formData.learningObjectives.split('\n').filter(obj => obj.trim()),
       curriculum: formData.curriculum.split('\n').filter(item => item.trim()),
       status: formData.status,
       students: editingCourse?.students || 0,
-      rating: editingCourse?.rating || 0,
+      rating: editingCourse?.rating || 4.5,
       createdAt: editingCourse?.createdAt || new Date(),
-      updatedAt: new Date()
+      updatedAt: new Date(),
+      content: formData.content
     };
 
     if (editingCourse) {
@@ -354,13 +243,13 @@ const CourseManagement = ({ userRole }: CourseManagementProps) => {
       ));
       toast({
         title: "Course Updated",
-        description: "The course has been successfully updated.",
+        description: "The course has been successfully updated with all content.",
       });
     } else {
       setCourses(prev => [...prev, courseData]);
       toast({
         title: "Course Created",
-        description: "The new course has been successfully created.",
+        description: "The new course has been successfully created with content.",
       });
     }
 
@@ -440,17 +329,18 @@ const CourseManagement = ({ userRole }: CourseManagementProps) => {
     setFormData({
       title: course.title,
       description: course.description,
-      fullDescription: course.fullDescription,
+      fullDescription: course.fullDescription || '',
       category: course.category,
       level: course.level,
       duration: course.duration,
       instructor: course.instructor,
-      image: course.image,
-      price: course.price,
-      prerequisites: course.prerequisites.join(', '),
-      learningObjectives: course.learningObjectives.join('\n'),
-      curriculum: course.curriculum.join('\n'),
-      status: course.status
+      thumbnail: course.thumbnail,
+      price: course.price || 0,
+      prerequisites: course.prerequisites?.join(', ') || '',
+      learningObjectives: course.learningObjectives?.join('\n') || '',
+      curriculum: course.curriculum?.join('\n') || '',
+      status: course.status || 'draft',
+      content: course.content || []
     });
     setIsDialogOpen(true);
   };
@@ -469,7 +359,7 @@ const CourseManagement = ({ userRole }: CourseManagementProps) => {
     setIsQuizDialogOpen(true);
   };
 
-  const handleDelete = (courseId: string) => {
+  const handleDelete = (courseId: number) => {
     setCourses(prev => prev.filter(course => course.id !== courseId));
     toast({
       title: "Course Deleted",
@@ -496,12 +386,20 @@ const CourseManagement = ({ userRole }: CourseManagementProps) => {
       level: '',
       duration: '',
       instructor: '',
-      image: '',
+      thumbnail: '',
       price: 0,
       prerequisites: '',
       learningObjectives: '',
       curriculum: '',
-      status: 'draft'
+      status: 'draft',
+      content: []
+    });
+    setContentFormData({
+      title: '',
+      type: 'video',
+      content: '',
+      youtubeUrl: '',
+      order: 1
     });
     setEditingCourse(null);
   };
@@ -533,7 +431,7 @@ const CourseManagement = ({ userRole }: CourseManagementProps) => {
   };
 
   const getCourseTitle = (courseId: string) => {
-    const course = courses.find(c => c.id === courseId);
+    const course = courses.find(c => c.id.toString() === courseId);
     return course ? course.title : 'Unknown Course';
   };
 
@@ -541,8 +439,8 @@ const CourseManagement = ({ userRole }: CourseManagementProps) => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-bold">Course & Quiz Management</h2>
-          <p className="text-gray-600">Create, edit, and manage your courses and quizzes</p>
+          <h2 className="text-2xl font-bold">Course & Content Management</h2>
+          <p className="text-gray-600">Create, edit, and manage your courses, content, and quizzes</p>
         </div>
       </div>
 
@@ -583,17 +481,18 @@ const CourseManagement = ({ userRole }: CourseManagementProps) => {
                   Add New Course
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+              <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>
                     {editingCourse ? 'Edit Course' : 'Create New Course'}
                   </DialogTitle>
                   <DialogDescription>
-                    Fill in the course details below to {editingCourse ? 'update' : 'create'} the course.
+                    Fill in the course details and add content below to {editingCourse ? 'update' : 'create'} the course.
                   </DialogDescription>
                 </DialogHeader>
                 
-                <form onSubmit={handleSubmit} className="space-y-4">
+                <form onSubmit={handleSubmit} className="space-y-6">
+                  {/* Basic Course Information */}
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium mb-1">Course Title</label>
@@ -707,11 +606,11 @@ const CourseManagement = ({ userRole }: CourseManagementProps) => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium mb-1">Image URL</label>
+                    <label className="block text-sm font-medium mb-1">Thumbnail URL</label>
                     <Input
-                      value={formData.image}
-                      onChange={(e) => handleInputChange('image', e.target.value)}
-                      placeholder="Course image URL"
+                      value={formData.thumbnail}
+                      onChange={(e) => handleInputChange('thumbnail', e.target.value)}
+                      placeholder="Course thumbnail URL"
                     />
                   </div>
 
@@ -744,6 +643,110 @@ const CourseManagement = ({ userRole }: CourseManagementProps) => {
                     />
                   </div>
 
+                  {/* Course Content Section */}
+                  <div className="border-t pt-6">
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-lg font-semibold">Course Content</h3>
+                    </div>
+
+                    {/* Add Content Form */}
+                    <div className="bg-gray-50 p-4 rounded-lg mb-4">
+                      <h4 className="font-medium mb-3">Add New Content</h4>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium mb-1">Content Title</label>
+                          <Input
+                            value={contentFormData.title}
+                            onChange={(e) => handleContentInputChange('title', e.target.value)}
+                            placeholder="e.g., Introduction to Data Analytics"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium mb-1">Content Type</label>
+                          <Select value={contentFormData.type} onValueChange={(value) => handleContentInputChange('type', value)}>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="video">Video</SelectItem>
+                              <SelectItem value="text">Text</SelectItem>
+                              <SelectItem value="pdf">PDF</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      <div className="mt-4">
+                        {contentFormData.type === 'video' ? (
+                          <div>
+                            <label className="block text-sm font-medium mb-1">YouTube URL</label>
+                            <Input
+                              value={contentFormData.youtubeUrl}
+                              onChange={(e) => handleContentInputChange('youtubeUrl', e.target.value)}
+                              placeholder="https://www.youtube.com/watch?v=..."
+                            />
+                          </div>
+                        ) : (
+                          <div>
+                            <label className="block text-sm font-medium mb-1">Content</label>
+                            <Textarea
+                              value={contentFormData.content}
+                              onChange={(e) => handleContentInputChange('content', e.target.value)}
+                              placeholder="Enter your content here..."
+                              rows={3}
+                            />
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="mt-4 flex justify-between items-center">
+                        <div>
+                          <label className="block text-sm font-medium mb-1">Order</label>
+                          <Input
+                            type="number"
+                            value={contentFormData.order}
+                            onChange={(e) => handleContentInputChange('order', parseInt(e.target.value) || 1)}
+                            min="1"
+                            className="w-20"
+                          />
+                        </div>
+                        <Button type="button" onClick={addContentToCourse} variant="outline">
+                          <Plus className="h-4 w-4 mr-2" />
+                          Add Content
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Content List */}
+                    {formData.content.length > 0 && (
+                      <div className="space-y-2">
+                        <h4 className="font-medium">Course Content ({formData.content.length} items)</h4>
+                        {formData.content.sort((a, b) => a.order - b.order).map((content, index) => (
+                          <div key={content.id} className="flex items-center justify-between p-3 bg-white border rounded">
+                            <div className="flex items-center space-x-3">
+                              <span className="text-sm font-medium text-gray-500">#{content.order}</span>
+                              <div className="flex items-center space-x-2">
+                                {content.type === 'video' && <Video className="h-4 w-4 text-red-500" />}
+                                {content.type === 'text' && <FileText className="h-4 w-4 text-blue-500" />}
+                                {content.type === 'pdf' && <Upload className="h-4 w-4 text-green-500" />}
+                                <span className="font-medium">{content.title}</span>
+                              </div>
+                              <Badge variant="outline">{content.type}</Badge>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => removeContentFromCourse(content.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
                   <div className="flex justify-end space-x-2 pt-4">
                     <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
                       Cancel
@@ -771,6 +774,7 @@ const CourseManagement = ({ userRole }: CourseManagementProps) => {
                     <TableHead>Category</TableHead>
                     <TableHead>Level</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Content</TableHead>
                     <TableHead>Students</TableHead>
                     <TableHead>Price</TableHead>
                     <TableHead>Actions</TableHead>
@@ -782,7 +786,7 @@ const CourseManagement = ({ userRole }: CourseManagementProps) => {
                       <TableCell>
                         <div className="flex items-center space-x-3">
                           <img 
-                            src={course.image} 
+                            src={course.thumbnail} 
                             alt={course.title}
                             className="w-12 h-12 rounded object-cover"
                           />
@@ -798,14 +802,20 @@ const CourseManagement = ({ userRole }: CourseManagementProps) => {
                           {course.level}
                         </Badge>
                       </TableCell>
-                      <TableCell>{getStatusBadge(course.status)}</TableCell>
+                      <TableCell>{getStatusBadge(course.status || 'draft')}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center">
+                          <BookOpen className="h-4 w-4 mr-1" />
+                          {course.content?.length || 0}
+                        </div>
+                      </TableCell>
                       <TableCell>
                         <div className="flex items-center">
                           <Users className="h-4 w-4 mr-1" />
                           {course.students}
                         </div>
                       </TableCell>
-                      <TableCell>${course.price}</TableCell>
+                      <TableCell>${course.price || 0}</TableCell>
                       <TableCell>
                         <div className="flex space-x-2">
                           <Button
@@ -883,7 +893,7 @@ const CourseManagement = ({ userRole }: CourseManagementProps) => {
                         </SelectTrigger>
                         <SelectContent>
                           {courses.map(course => (
-                            <SelectItem key={course.id} value={course.id}>{course.title}</SelectItem>
+                            <SelectItem key={course.id} value={course.id.toString()}>{course.title}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -1151,7 +1161,7 @@ const CourseManagement = ({ userRole }: CourseManagementProps) => {
               <DialogHeader>
                 <DialogTitle className="flex items-center justify-between">
                   <span>{viewingCourse.title}</span>
-                  {getStatusBadge(viewingCourse.status)}
+                  {getStatusBadge(viewingCourse.status || 'draft')}
                 </DialogTitle>
                 <DialogDescription>
                   Course details and curriculum information
@@ -1167,7 +1177,7 @@ const CourseManagement = ({ userRole }: CourseManagementProps) => {
                       <div><strong>Category:</strong> {viewingCourse.category}</div>
                       <div><strong>Level:</strong> {viewingCourse.level}</div>
                       <div><strong>Duration:</strong> {viewingCourse.duration}</div>
-                      <div><strong>Price:</strong> ${viewingCourse.price}</div>
+                      <div><strong>Price:</strong> ${viewingCourse.price || 0}</div>
                       <div><strong>Students:</strong> {viewingCourse.students}</div>
                       <div><strong>Rating:</strong> {viewingCourse.rating}/5</div>
                     </div>
@@ -1175,7 +1185,7 @@ const CourseManagement = ({ userRole }: CourseManagementProps) => {
                   
                   <div>
                     <img 
-                      src={viewingCourse.image} 
+                      src={viewingCourse.thumbnail} 
                       alt={viewingCourse.title}
                       className="w-full h-48 object-cover rounded"
                     />
@@ -1184,47 +1194,53 @@ const CourseManagement = ({ userRole }: CourseManagementProps) => {
 
                 <div>
                   <h4 className="font-semibold mb-2">Description</h4>
-                  <p className="text-sm text-gray-600">{viewingCourse.fullDescription}</p>
+                  <p className="text-sm text-gray-600">{viewingCourse.fullDescription || viewingCourse.description}</p>
                 </div>
 
-                <div>
-                  <h4 className="font-semibold mb-2">Prerequisites</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {viewingCourse.prerequisites.map((prereq, index) => (
-                      <Badge key={index} variant="outline">{prereq}</Badge>
-                    ))}
+                {viewingCourse.prerequisites && viewingCourse.prerequisites.length > 0 && (
+                  <div>
+                    <h4 className="font-semibold mb-2">Prerequisites</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {viewingCourse.prerequisites.map((prereq, index) => (
+                        <Badge key={index} variant="outline">{prereq}</Badge>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
 
-                <div>
-                  <h4 className="font-semibold mb-2">Learning Objectives</h4>
-                  <ul className="text-sm space-y-1">
-                    {viewingCourse.learningObjectives.map((objective, index) => (
-                      <li key={index} className="flex items-start">
-                        <span className="text-blue-600 mr-2">•</span>
-                        {objective}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                <div>
-                  <h4 className="font-semibold mb-2">Curriculum</h4>
-                  <div className="space-y-2">
-                    {viewingCourse.curriculum.map((module, index) => (
-                      <div key={index} className="flex items-center p-2 bg-gray-50 rounded">
-                        <BookOpen className="h-4 w-4 mr-2 text-blue-600" />
-                        <span className="text-sm">{module}</span>
-                      </div>
-                    ))}
+                {viewingCourse.learningObjectives && viewingCourse.learningObjectives.length > 0 && (
+                  <div>
+                    <h4 className="font-semibold mb-2">Learning Objectives</h4>
+                    <ul className="text-sm space-y-1">
+                      {viewingCourse.learningObjectives.map((objective, index) => (
+                        <li key={index} className="flex items-start">
+                          <span className="text-blue-600 mr-2">•</span>
+                          {objective}
+                        </li>
+                      ))}
+                    </ul>
                   </div>
-                </div>
+                )}
+
+                {viewingCourse.curriculum && viewingCourse.curriculum.length > 0 && (
+                  <div>
+                    <h4 className="font-semibold mb-2">Curriculum</h4>
+                    <div className="space-y-2">
+                      {viewingCourse.curriculum.map((module, index) => (
+                        <div key={index} className="flex items-center p-2 bg-gray-50 rounded">
+                          <BookOpen className="h-4 w-4 mr-2 text-blue-600" />
+                          <span className="text-sm">{module}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {viewingCourse.content && viewingCourse.content.length > 0 && (
                   <div>
                     <h4 className="font-semibold mb-2">Course Content</h4>
                     <div className="space-y-3">
-                      {viewingCourse.content.map((item, index) => (
+                      {viewingCourse.content.sort((a, b) => a.order - b.order).map((item) => (
                         <div key={item.id} className="border rounded p-3">
                           <div className="flex items-center justify-between mb-2">
                             <h5 className="font-medium">{item.title}</h5>
@@ -1239,6 +1255,7 @@ const CourseManagement = ({ userRole }: CourseManagementProps) => {
                                 src={item.content}
                                 className="w-full h-full rounded"
                                 allowFullScreen
+                                title={item.title}
                               />
                             </div>
                           )}
