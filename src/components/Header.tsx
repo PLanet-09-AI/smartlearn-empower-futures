@@ -21,11 +21,11 @@ const Header = ({ isLoggedIn, onLogout }: HeaderProps) => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           <div className="flex items-center space-x-3">
-            <div className="p-2 bg-blue-600 rounded-lg">
+            <div className="p-2 bg-purple-600 rounded-lg">
               <GraduationCap className="h-6 w-6 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-gray-900">SmartLearn</h1>
+              <h1 className="text-xl font-bold text-gray-900">Rosebank SmartLearn</h1>
               <p className="text-sm text-gray-600">Empowering Digital Futures</p>
             </div>
           </div>

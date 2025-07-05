@@ -35,14 +35,37 @@ const Dashboard = ({ userRole }: DashboardProps) => {
   const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
   const [courses, setCourses] = useState<Course[]>(initialCourses);
 
-  // Mock user data
+  // Calculate real stats from courses data
+  const getTotalStudents = () => {
+    return courses.reduce((total, course) => total + course.students, 0);
+  };
+
+  const getCoursesCreated = () => {
+    return courses.length;
+  };
+
+  const getAverageRating = () => {
+    const validRatings = courses.filter(course => course.rating > 0);
+    if (validRatings.length === 0) return 0;
+    const total = validRatings.reduce((sum, course) => sum + course.rating, 0);
+    return (total / validRatings.length).toFixed(1);
+  };
+
+  const getTopCourses = () => {
+    return courses
+      .sort((a, b) => b.students - a.students)
+      .slice(0, 2);
+  };
+
+  // Mock user data with real course stats
   const userData = {
     name: userRole === 'admin' ? 'Admin User' : userRole === 'educator' ? 'Dr. Sarah Johnson' : 'John Doe',
     enrolledCourses: userRole === 'learner' ? 3 : 0,
     completedCourses: userRole === 'learner' ? 1 : 0,
     certificationsEarned: userRole === 'learner' ? 2 : 0,
-    totalStudents: userRole !== 'learner' ? 1250 : 0,
-    coursesCreated: userRole !== 'learner' ? 8 : 0,
+    totalStudents: getTotalStudents(),
+    coursesCreated: getCoursesCreated(),
+    averageRating: getAverageRating(),
   };
 
   const handleCourseSelect = (courseId: number) => {
@@ -59,7 +82,7 @@ const Dashboard = ({ userRole }: DashboardProps) => {
     setActiveTab("courses");
   };
 
-  // Quick stats based on user role
+  // Quick stats based on user role with real data
   const getQuickStats = () => {
     if (userRole === 'learner') {
       return [
@@ -72,8 +95,8 @@ const Dashboard = ({ userRole }: DashboardProps) => {
       return [
         { title: "Total Students", value: userData.totalStudents, icon: Users },
         { title: "Courses Created", value: userData.coursesCreated, icon: BookOpen },
-        { title: "Avg. Rating", value: "4.8", icon: TrendingUp },
-        { title: "Revenue", value: "$12,500", icon: BarChart3 },
+        { title: "Avg. Rating", value: userData.averageRating, icon: TrendingUp },
+        { title: "Active Courses", value: courses.filter(c => c.students > 0).length, icon: BarChart3 },
       ];
     }
   };
@@ -84,6 +107,7 @@ const Dashboard = ({ userRole }: DashboardProps) => {
         <CourseContent 
           courseId={selectedCourseId} 
           onBack={handleBackToCourses}
+          userRole={userRole}
         />
       </div>
     );
@@ -147,7 +171,7 @@ const Dashboard = ({ userRole }: DashboardProps) => {
                     <CardTitle className="text-sm font-medium text-gray-600">
                       {stat.title}
                     </CardTitle>
-                    <stat.icon className="h-4 w-4 text-blue-600" />
+                    <stat.icon className="h-4 w-4 text-purple-600" />
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-bold">{stat.value}</div>
@@ -170,15 +194,15 @@ const Dashboard = ({ userRole }: DashboardProps) => {
                       <div className="space-y-3">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center space-x-3">
-                            <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                              <BookOpen className="h-5 w-5 text-blue-600" />
+                            <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
+                              <BookOpen className="h-5 w-5 text-purple-600" />
                             </div>
                             <div>
                               <p className="font-medium">Data Analytics Fundamentals</p>
                               <p className="text-sm text-gray-500">Module 3 of 7</p>
                             </div>
                           </div>
-                          <Button size="sm">
+                          <Button size="sm" className="bg-purple-600 hover:bg-purple-700">
                             <Play className="h-4 w-4 mr-1" />
                             Continue
                           </Button>
@@ -197,7 +221,7 @@ const Dashboard = ({ userRole }: DashboardProps) => {
                               <p className="text-sm text-gray-500">Module 1 of 12</p>
                             </div>
                           </div>
-                          <Button size="sm">
+                          <Button size="sm" className="bg-purple-600 hover:bg-purple-700">
                             <Play className="h-4 w-4 mr-1" />
                             Continue
                           </Button>
@@ -248,12 +272,12 @@ const Dashboard = ({ userRole }: DashboardProps) => {
                     <CardContent className="space-y-4">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-3">
-                          <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white text-sm font-medium">
+                          <div className="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center text-white text-sm font-medium">
                             JS
                           </div>
                           <div>
                             <p className="font-medium">John Smith enrolled</p>
-                            <p className="text-sm text-gray-500">Data Analytics Fundamentals</p>
+                            <p className="text-sm text-gray-500">{courses[0]?.title || 'Course'}</p>
                           </div>
                         </div>
                         <span className="text-sm text-gray-500">2 hours ago</span>
@@ -266,7 +290,7 @@ const Dashboard = ({ userRole }: DashboardProps) => {
                           </div>
                           <div>
                             <p className="font-medium">Maria Johnson completed</p>
-                            <p className="text-sm text-gray-500">Web Development Bootcamp</p>
+                            <p className="text-sm text-gray-500">{courses[1]?.title || 'Course'}</p>
                           </div>
                         </div>
                         <span className="text-sm text-gray-500">1 day ago</span>
@@ -278,24 +302,23 @@ const Dashboard = ({ userRole }: DashboardProps) => {
                   <Card>
                     <CardHeader>
                       <CardTitle>Your Top Courses</CardTitle>
-                      <CardDescription>Most popular courses you've created</CardDescription>
+                      <CardDescription>Most popular courses by enrollment</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-medium">Data Analytics Fundamentals</p>
-                          <p className="text-sm text-gray-500">245 students • 4.8 rating</p>
+                      {getTopCourses().map((course, index) => (
+                        <div key={course.id} className="flex items-center justify-between">
+                          <div>
+                            <p className="font-medium">{course.title}</p>
+                            <p className="text-sm text-gray-500">{course.students} students • {course.rating > 0 ? `${course.rating}/5 rating` : 'No ratings yet'}</p>
+                          </div>
+                          <Badge variant={index === 0 ? "default" : "secondary"}>
+                            {index === 0 ? "Most Popular" : "Rising"}
+                          </Badge>
                         </div>
-                        <Badge>Best Seller</Badge>
-                      </div>
-                      
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-medium">Full-Stack Web Development</p>
-                          <p className="text-sm text-gray-500">186 students • 4.9 rating</p>
-                        </div>
-                        <Badge variant="secondary">High Rated</Badge>
-                      </div>
+                      ))}
+                      {getTopCourses().length === 0 && (
+                        <p className="text-sm text-gray-500">No courses created yet</p>
+                      )}
                     </CardContent>
                   </Card>
                 </>
@@ -333,48 +356,46 @@ const Dashboard = ({ userRole }: DashboardProps) => {
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="flex justify-between items-center">
-                      <span>Total Users</span>
-                      <span className="font-semibold">2,847</span>
+                      <span>Total Students</span>
+                      <span className="font-semibold">{userData.totalStudents}</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span>Active Courses</span>
-                      <span className="font-semibold">23</span>
+                      <span className="font-semibold">{userData.coursesCreated}</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span>Course Completions</span>
-                      <span className="font-semibold">1,432</span>
+                      <span>Average Rating</span>
+                      <span className="font-semibold">{userData.averageRating}/5</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span>Revenue (This Month)</span>
-                      <span className="font-semibold">$45,230</span>
+                      <span>Popular Courses</span>
+                      <span className="font-semibold">{courses.filter(c => c.students > 50).length}</span>
                     </div>
                   </CardContent>
                 </Card>
 
                 <Card>
                   <CardHeader>
-                    <CardTitle>User Growth</CardTitle>
-                    <CardDescription>New registrations over time</CardDescription>
+                    <CardTitle>Course Performance</CardTitle>
+                    <CardDescription>Enrollment trends by course</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-3">
-                      <div className="flex justify-between">
-                        <span className="text-sm">This Week</span>
-                        <span className="text-sm font-medium">+127</span>
-                      </div>
-                      <Progress value={85} />
-                      
-                      <div className="flex justify-between">
-                        <span className="text-sm">This Month</span>
-                        <span className="text-sm font-medium">+456</span>
-                      </div>
-                      <Progress value={65} />
-                      
-                      <div className="flex justify-between">
-                        <span className="text-sm">This Quarter</span>
-                        <span className="text-sm font-medium">+1,234</span>
-                      </div>
-                      <Progress value={45} />
+                      {courses.slice(0, 3).map((course, index) => (
+                        <div key={course.id}>
+                          <div className="flex justify-between">
+                            <span className="text-sm truncate">{course.title}</span>
+                            <span className="text-sm font-medium">{course.students} students</span>
+                          </div>
+                          <Progress 
+                            value={(course.students / Math.max(...courses.map(c => c.students), 1)) * 100} 
+                            className="h-2"
+                          />
+                        </div>
+                      ))}
+                      {courses.length === 0 && (
+                        <p className="text-sm text-gray-500">No courses available</p>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
