@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -311,7 +310,7 @@ const Dashboard = ({ userRole }: DashboardProps) => {
                             <p className="font-medium">{course.title}</p>
                             <p className="text-sm text-gray-500">{course.students} students • {course.rating > 0 ? `${course.rating}/5 rating` : 'No ratings yet'}</p>
                           </div>
-                          <Badge variant={index === 0 ? "default" : "secondary"}>
+                          <Badge variant={index === 0 ? "default" : "secondary"} className={index === 0 ? "bg-purple-600" : ""}>
                             {index === 0 ? "Most Popular" : "Rising"}
                           </Badge>
                         </div>
