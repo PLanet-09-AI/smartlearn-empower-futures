@@ -18,10 +18,29 @@ const VoiceCommand = ({ onCommand, commands = {}, className = "", size = "defaul
   const [lastCommand, setLastCommand] = useState("");
 
   const defaultCommands = {
-    'dashboard': () => window.location.hash = '#dashboard',
-    'courses': () => window.location.hash = '#courses',
-    'home': () => window.location.hash = '#home',
-    'help': () => toast.info("Try saying: dashboard, courses, home, or any other navigation command"),
+    // Navigation commands
+    'overview': () => window.dispatchEvent(new CustomEvent('voice-navigate', { detail: 'overview' })),
+    'courses': () => window.dispatchEvent(new CustomEvent('voice-navigate', { detail: 'courses' })),
+    'browse courses': () => window.dispatchEvent(new CustomEvent('voice-navigate', { detail: 'courses' })),
+    'course library': () => window.dispatchEvent(new CustomEvent('voice-navigate', { detail: 'courses' })),
+    'management': () => window.dispatchEvent(new CustomEvent('voice-navigate', { detail: 'management' })),
+    'manage courses': () => window.dispatchEvent(new CustomEvent('voice-navigate', { detail: 'management' })),
+    'analytics': () => window.dispatchEvent(new CustomEvent('voice-navigate', { detail: 'analytics' })),
+    
+    // Button commands
+    'continue': () => window.dispatchEvent(new CustomEvent('voice-click', { detail: 'continue' })),
+    'continue learning': () => window.dispatchEvent(new CustomEvent('voice-click', { detail: 'continue' })),
+    'create course': () => window.dispatchEvent(new CustomEvent('voice-click', { detail: 'create-course' })),
+    'new course': () => window.dispatchEvent(new CustomEvent('voice-click', { detail: 'create-course' })),
+    'save course': () => window.dispatchEvent(new CustomEvent('voice-click', { detail: 'save-course' })),
+    'add content': () => window.dispatchEvent(new CustomEvent('voice-click', { detail: 'add-content' })),
+    'add question': () => window.dispatchEvent(new CustomEvent('voice-click', { detail: 'add-question' })),
+    'publish course': () => window.dispatchEvent(new CustomEvent('voice-click', { detail: 'publish-course' })),
+    
+    // General commands
+    'help': () => toast.info("Try saying: overview, courses, management, analytics, continue learning, create course, save course, add content, or publish course"),
+    'what can I say': () => toast.info("Available commands: navigation (overview, courses, management), actions (continue learning, create course, save course), and general commands (help)"),
+    
     ...commands
   };
 

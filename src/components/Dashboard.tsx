@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +33,64 @@ const Dashboard = ({ userRole }: DashboardProps) => {
   const [activeTab, setActiveTab] = useState("overview");
   const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
   const [courses, setCourses] = useState<Course[]>(initialCourses);
+
+  // Voice command event listeners
+  useEffect(() => {
+    const handleVoiceNavigate = (event: CustomEvent) => {
+      const tab = event.detail;
+      if (tab === 'management' && (userRole === 'educator' || userRole === 'admin')) {
+        setActiveTab('management');
+      } else if (tab === 'analytics' && userRole === 'admin') {
+        setActiveTab('analytics');
+      } else if (tab === 'overview' || tab === 'courses') {
+        setActiveTab(tab);
+      }
+    };
+
+    const handleVoiceClick = (event: CustomEvent) => {
+      const action = event.detail;
+      
+      if (action === 'continue') {
+        // Simulate clicking the first continue button
+        const continueButtons = document.querySelectorAll('button');
+        for (const button of continueButtons) {
+          if (button.textContent?.includes('Continue')) {
+            button.click();
+            break;
+          }
+        }
+      } else if (action === 'create-course') {
+        // Switch to management tab and trigger create course
+        if (userRole === 'educator' || userRole === 'admin') {
+          setActiveTab('management');
+          setTimeout(() => {
+            const createButton = document.querySelector('[data-voice="create-course"]') as HTMLButtonElement;
+            if (createButton) createButton.click();
+          }, 100);
+        }
+      } else if (action === 'save-course') {
+        const saveButton = document.querySelector('[data-voice="save-course"]') as HTMLButtonElement;
+        if (saveButton) saveButton.click();
+      } else if (action === 'add-content') {
+        const addContentButton = document.querySelector('[data-voice="add-content"]') as HTMLButtonElement;
+        if (addContentButton) addContentButton.click();
+      } else if (action === 'add-question') {
+        const addQuestionButton = document.querySelector('[data-voice="add-question"]') as HTMLButtonElement;
+        if (addQuestionButton) addQuestionButton.click();
+      } else if (action === 'publish-course') {
+        const publishButton = document.querySelector('[data-voice="publish-course"]') as HTMLButtonElement;
+        if (publishButton) publishButton.click();
+      }
+    };
+
+    window.addEventListener('voice-navigate', handleVoiceNavigate as EventListener);
+    window.addEventListener('voice-click', handleVoiceClick as EventListener);
+
+    return () => {
+      window.removeEventListener('voice-navigate', handleVoiceNavigate as EventListener);
+      window.removeEventListener('voice-click', handleVoiceClick as EventListener);
+    };
+  }, [userRole]);
 
   // Calculate real stats from courses data
   const getTotalStudents = () => {
@@ -201,7 +259,7 @@ const Dashboard = ({ userRole }: DashboardProps) => {
                               <p className="text-sm text-gray-500">Module 3 of 7</p>
                             </div>
                           </div>
-                          <Button size="sm" className="bg-purple-600 hover:bg-purple-700">
+                          <Button size="sm" className="bg-purple-600 hover:bg-purple-700" data-voice="continue">
                             <Play className="h-4 w-4 mr-1" />
                             Continue
                           </Button>
@@ -220,7 +278,7 @@ const Dashboard = ({ userRole }: DashboardProps) => {
                               <p className="text-sm text-gray-500">Module 1 of 12</p>
                             </div>
                           </div>
-                          <Button size="sm" className="bg-purple-600 hover:bg-purple-700">
+                          <Button size="sm" className="bg-purple-600 hover:bg-purple-700" data-voice="continue">
                             <Play className="h-4 w-4 mr-1" />
                             Continue
                           </Button>
