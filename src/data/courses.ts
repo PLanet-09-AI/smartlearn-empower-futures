@@ -1,4 +1,3 @@
-
 import { Course } from "@/types";
 
 export const courses: Course[] = [
@@ -13,6 +12,7 @@ export const courses: Course[] = [
     students: 1234,
     instructor: "Sarah Johnson",
     thumbnail: "/placeholder.svg?height=200&width=300",
+    status: "published",
     content: [
       {
         id: 1,
@@ -122,6 +122,7 @@ Best practices include organizing CSS with meaningful class names, avoiding inli
     students: 856,
     instructor: "Dr. Michael Chen",
     thumbnail: "/placeholder.svg?height=200&width=300",
+    status: "published",
     content: [
       {
         id: 1,
@@ -296,6 +297,7 @@ Data Quality Considerations:
     students: 2103,
     instructor: "Emma Rodriguez",
     thumbnail: "/placeholder.svg?height=200&width=300",
+    status: "published",
     content: [
       {
         id: 1,

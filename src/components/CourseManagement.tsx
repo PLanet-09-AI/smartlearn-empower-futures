@@ -11,44 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Plus, Edit, Trash2, Eye, BookOpen, Users, Star, Clock, Video, FileText, File, X } from "lucide-react";
 import { courses as initialCourses } from "@/data/courses";
-
-interface Course {
-  id: number;
-  title: string;
-  description: string;
-  category: string;
-  level: 'Beginner' | 'Intermediate' | 'Advanced';
-  duration: string;
-  students: number;
-  rating: number;
-  instructor: string;
-  thumbnail: string;
-  status: 'draft' | 'published' | 'archived';
-  content?: CourseContent[];
-}
-
-interface CourseContent {
-  id: number;
-  title: string;
-  type: 'video' | 'text' | 'pdf';
-  url?: string;
-  content?: string;
-  duration?: string;
-}
-
-interface Quiz {
-  id: number;
-  title: string;
-  courseId: number;
-  questions: QuizQuestion[];
-}
-
-interface QuizQuestion {
-  id: number;
-  question: string;
-  options: string[];
-  correctAnswer: number;
-}
+import { Course, CourseContent, Quiz, QuizQuestion } from "@/types";
 
 interface CourseManagementProps {
   userRole: 'learner' | 'educator' | 'admin';

@@ -1,9 +1,10 @@
+
 export interface Course {
   id: number;
   title: string;
   description: string;
   category: string;
-  level: string;
+  level: 'Beginner' | 'Intermediate' | 'Advanced';
   duration: string;
   rating: number;
   students: number;
