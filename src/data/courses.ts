@@ -11,7 +11,7 @@ export const courses: Course[] = [
     rating: 4.8,
     students: 1234,
     instructor: "Sarah Johnson",
-    thumbnail: "/placeholder.svg?height=200&width=300",
+    thumbnail: "https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=400&h=250&fit=crop",
     status: "published",
     content: [
       {
@@ -88,25 +88,26 @@ Best practices include organizing CSS with meaningful class names, avoiding inli
       }
     ],
     quiz: {
+      id: 1,
       title: "Web Development Fundamentals Quiz",
       questions: [
         {
           id: 1,
-          question: "What does HTML stand for?",
-          options: ["Hyper Text Markup Language", "High Tech Modern Language", "Home Tool Markup Language", "Hyperlink and Text Markup Language"],
-          correctAnswer: 0
-        },
-        {
-          id: 2,
-          question: "Which of the following is used for styling web pages?",
-          options: ["HTML", "CSS", "JavaScript", "Python"],
+          question: "Which HTML tag is used to create a hyperlink?",
+          options: ["<link>", "<a>", "<href>", "<url>"],
           correctAnswer: 1
         },
         {
-          id: 3,
-          question: "What are the three main types of web development?",
-          options: ["HTML, CSS, JavaScript", "Client, Server, Database", "Front-end, Back-end, Full-stack", "Design, Development, Deployment"],
+          id: 2,
+          question: "What does CSS stand for?",
+          options: ["Computer Style Sheets", "Creative Style Sheets", "Cascading Style Sheets", "Colorful Style Sheets"],
           correctAnswer: 2
+        },
+        {
+          id: 3,
+          question: "Which of the following is a JavaScript data type?",
+          options: ["String", "Boolean", "Number", "All of the above"],
+          correctAnswer: 3
         }
       ]
     }
@@ -121,7 +122,7 @@ Best practices include organizing CSS with meaningful class names, avoiding inli
     rating: 4.9,
     students: 856,
     instructor: "Dr. Michael Chen",
-    thumbnail: "/placeholder.svg?height=200&width=300",
+    thumbnail: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=400&h=250&fit=crop",
     status: "published",
     content: [
       {
@@ -257,30 +258,19 @@ Data Quality Considerations:
       }
     ],
     quiz: {
+      id: 2,
       title: "Data Science Fundamentals Quiz",
       questions: [
         {
           id: 1,
-          question: "Which Python library is primarily used for data manipulation and analysis?",
+          question: "Which Python library is primarily used for data manipulation?",
           options: ["NumPy", "Pandas", "Matplotlib", "Scikit-learn"],
           correctAnswer: 1
         },
         {
           id: 2,
-          question: "What is the difference between correlation and causation?",
-          options: ["They are the same thing", "Correlation implies causation", "Causation implies correlation, but correlation doesn't imply causation", "There is no relationship between them"],
-          correctAnswer: 2
-        },
-        {
-          id: 3,
-          question: "Which visualization is best for showing the relationship between two numerical variables?",
-          options: ["Bar chart", "Pie chart", "Scatter plot", "Histogram"],
-          correctAnswer: 2
-        },
-        {
-          id: 4,
-          question: "What does a p-value less than 0.05 typically indicate?",
-          options: ["The result is practically significant", "The result is statistically significant", "The null hypothesis is true", "The sample size is too small"],
+          question: "What is the first step in the data science process?",
+          options: ["Data cleaning", "Data collection", "Data analysis", "Data visualization"],
           correctAnswer: 1
         }
       ]
@@ -296,7 +286,7 @@ Data Quality Considerations:
     rating: 4.7,
     students: 2103,
     instructor: "Emma Rodriguez",
-    thumbnail: "/placeholder.svg?height=200&width=300",
+    thumbnail: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=400&h=250&fit=crop",
     status: "published",
     content: [
       {
@@ -483,30 +473,19 @@ Deliverability Best Practices:
       }
     ],
     quiz: {
-      title: "Digital Marketing Mastery Quiz",
+      id: 3,
+      title: "Digital Marketing Quiz",
       questions: [
         {
           id: 1,
           question: "What does SEO stand for?",
-          options: ["Social Engine Optimization", "Search Engine Optimization", "Site Enhancement Operations", "Search Enhancement Optimization"],
-          correctAnswer: 1
+          options: ["Search Engine Optimization", "Social Engine Optimization", "Search Email Optimization", "Social Email Optimization"],
+          correctAnswer: 0
         },
         {
           id: 2,
-          question: "Which platform is best for B2B marketing?",
-          options: ["Instagram", "TikTok", "LinkedIn", "Snapchat"],
-          correctAnswer: 2
-        },
-        {
-          id: 3,
-          question: "What is the average ROI for email marketing?",
-          options: ["$20 for every $1 spent", "$32 for every $1 spent", "$42 for every $1 spent", "$52 for every $1 spent"],
-          correctAnswer: 2
-        },
-        {
-          id: 4,
-          question: "What percentage of emails are opened on mobile devices?",
-          options: ["40%+", "50%+", "60%+", "70%+"],
+          question: "Which metric measures the percentage of visitors who leave after viewing only one page?",
+          options: ["Conversion rate", "Click-through rate", "Bounce rate", "Engagement rate"],
           correctAnswer: 2
         }
       ]

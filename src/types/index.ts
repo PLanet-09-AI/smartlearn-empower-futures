@@ -18,14 +18,17 @@ export interface Course {
 export interface CourseContent {
   id: number;
   title: string;
-  type: 'text' | 'video';
+  type: 'text' | 'video' | 'pdf';
   duration: string;
   content: string;
   videoUrl?: string;
+  url?: string;
 }
 
 export interface Quiz {
+  id: number;
   title: string;
+  courseId?: number;
   questions: QuizQuestion[];
 }
 

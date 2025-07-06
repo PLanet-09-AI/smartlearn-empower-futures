@@ -68,7 +68,12 @@ const CourseManagement = ({ userRole, onCoursesUpdate }: CourseManagementProps) 
         instructor: newCourse.instructor || 'Instructor',
         thumbnail: newCourse.thumbnail || 'https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=400&h=250&fit=crop',
         status: newCourse.status as 'draft' | 'published' | 'archived',
-        content: []
+        content: [],
+        quiz: {
+          id: Date.now() + 1,
+          title: `${newCourse.title} Quiz`,
+          questions: []
+        }
       };
       
       const updatedCourses = [...courses, course];
@@ -116,8 +121,8 @@ const CourseManagement = ({ userRole, onCoursesUpdate }: CourseManagementProps) 
         title: newContent.title,
         type: newContent.type as 'video' | 'text' | 'pdf',
         url: newContent.url,
-        content: newContent.content,
-        duration: newContent.duration
+        content: newContent.content || '',
+        duration: newContent.duration || ''
       };
 
       const updatedCourses = courses.map(course => {
