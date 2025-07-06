@@ -204,7 +204,8 @@ const CourseManagement = ({ userRole, onCoursesUpdate }: CourseManagementProps) 
   };
 
   const addQuizQuestion = () => {
-    const newQuestion: Omit<QuizQuestion, 'id'> = {
+    const newQuestion: QuizQuestion = {
+      id: Date.now(), // Generate a temporary ID
       question: '',
       options: ['', '', '', ''],
       correctAnswer: 0

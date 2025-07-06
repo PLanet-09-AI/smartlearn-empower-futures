@@ -1,4 +1,3 @@
-
 export interface Course {
   id: number;
   title: string;
@@ -12,6 +11,7 @@ export interface Course {
   thumbnail: string;
   content: CourseContent[];
   quiz: Quiz;
+  status: 'draft' | 'published' | 'archived';
 }
 
 export interface CourseContent {
