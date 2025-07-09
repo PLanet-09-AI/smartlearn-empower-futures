@@ -25,7 +25,7 @@ const Header = ({ isLoggedIn, onLogout }: HeaderProps) => {
               <GraduationCap className="h-6 w-6 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-gray-900">Rosebank SmartLearn</h1>
+              <h1 className="text-xl font-bold text-gray-900">eTAIN SmartLearn</h1>
               <p className="text-sm text-gray-600">Empowering Digital Futures</p>
             </div>
           </div>
