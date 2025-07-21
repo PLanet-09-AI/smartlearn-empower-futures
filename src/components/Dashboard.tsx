@@ -105,24 +105,17 @@ const Dashboard = ({ userRole }: DashboardProps) => {
     const validRatings = courses.filter(course => course.rating > 0);
     if (validRatings.length === 0) return 0;
     const total = validRatings.reduce((sum, course) => sum + course.rating, 0);
-    return (total / validRatings.length).toFixed(1);
+    return Number((total / validRatings.length).toFixed(1));
+  };
+
+  const getActiveCourses = () => {
+    return courses.filter(course => course.students > 0).length;
   };
 
   const getTopCourses = () => {
     return courses
       .sort((a, b) => b.students - a.students)
       .slice(0, 2);
-  };
-
-  // Mock user data with real course stats
-  const userData = {
-    name: userRole === 'admin' ? 'Admin User' : userRole === 'educator' ? 'Dr. Sarah Johnson' : 'John Doe',
-    enrolledCourses: userRole === 'learner' ? 3 : 0,
-    completedCourses: userRole === 'learner' ? 1 : 0,
-    certificationsEarned: userRole === 'learner' ? 2 : 0,
-    totalStudents: getTotalStudents(),
-    coursesCreated: getCoursesCreated(),
-    averageRating: getAverageRating(),
   };
 
   const handleCourseSelect = (courseId: number) => {
@@ -139,23 +132,35 @@ const Dashboard = ({ userRole }: DashboardProps) => {
     setActiveTab("courses");
   };
 
-  // Quick stats based on user role with real data
+  // Quick stats based on user role with dynamic data
   const getQuickStats = () => {
     if (userRole === 'learner') {
       return [
-        { title: "Enrolled Courses", value: userData.enrolledCourses, icon: BookOpen },
-        { title: "Completed", value: userData.completedCourses, icon: Award },
-        { title: "Certificates", value: userData.certificationsEarned, icon: Award },
-        { title: "Study Hours", value: "24", icon: Clock },
+        { title: "Enrolled Courses", value: 3, icon: BookOpen },
+        { title: "Completed", value: 1, icon: Award },
+        { title: "Certificates", value: 2, icon: Award },
+        { title: "Study Hours", value: 24, icon: Clock },
       ];
     } else {
       return [
-        { title: "Total Students", value: userData.totalStudents, icon: Users },
-        { title: "Courses Created", value: userData.coursesCreated, icon: BookOpen },
-        { title: "Avg. Rating", value: userData.averageRating, icon: TrendingUp },
-        { title: "Active Courses", value: courses.filter(c => c.students > 0).length, icon: BarChart3 },
+        { title: "Total Students", value: getTotalStudents(), icon: Users },
+        { title: "Courses Created", value: getCoursesCreated(), icon: BookOpen },
+        { title: "Avg. Rating", value: getAverageRating(), icon: TrendingUp },
+        { title: "Active Courses", value: getActiveCourses(), icon: BarChart3 },
       ];
     }
+  };
+
+  const getUserName = () => {
+    if (userRole === 'admin') return 'Admin User';
+    if (userRole === 'educator') return 'Dr. Sarah Johnson';
+    return 'John Doe';
+  };
+
+  const getUserWelcomeMessage = () => {
+    if (userRole === 'learner') return "Continue your learning journey";
+    if (userRole === 'educator') return "Manage your courses and students";
+    return "Oversee the entire platform";
   };
 
   if (selectedCourseId) {
@@ -178,15 +183,10 @@ const Dashboard = ({ userRole }: DashboardProps) => {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold text-gray-900">
-                Welcome back, {userData.name}!
+                Welcome back, {getUserName()}!
               </h1>
               <p className="text-gray-600 mt-1">
-                {userRole === 'learner' 
-                  ? "Continue your learning journey" 
-                  : userRole === 'educator'
-                  ? "Manage your courses and students"
-                  : "Oversee the entire platform"
-                }
+                {getUserWelcomeMessage()}
               </p>
             </div>
             <VoiceCommand />
@@ -414,15 +414,15 @@ const Dashboard = ({ userRole }: DashboardProps) => {
                   <CardContent className="space-y-4">
                     <div className="flex justify-between items-center">
                       <span>Total Students</span>
-                      <span className="font-semibold">{userData.totalStudents}</span>
+                      <span className="font-semibold">{getTotalStudents()}</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span>Active Courses</span>
-                      <span className="font-semibold">{userData.coursesCreated}</span>
+                      <span className="font-semibold">{getCoursesCreated()}</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span>Average Rating</span>
-                      <span className="font-semibold">{userData.averageRating}/5</span>
+                      <span className="font-semibold">{getAverageRating()}/5</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span>Popular Courses</span>
