@@ -30,7 +30,7 @@ interface Course {
 }
 
 const Dashboard = ({ userRole }: DashboardProps) => {
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTab] = useState("courses");
   const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
   const [courses, setCourses] = useState<Course[]>(initialCourses);
 
@@ -42,7 +42,7 @@ const Dashboard = ({ userRole }: DashboardProps) => {
         setActiveTab('management');
       } else if (tab === 'analytics' && userRole === 'admin') {
         setActiveTab('analytics');
-      } else if (tab === 'overview' || tab === 'courses') {
+      } else if (tab === 'courses') {
         setActiveTab(tab);
       }
     };
@@ -195,11 +195,7 @@ const Dashboard = ({ userRole }: DashboardProps) => {
 
         {/* Navigation Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:grid-cols-4">
-            <TabsTrigger value="overview" className="flex items-center gap-2">
-              <BarChart3 className="h-4 w-4" />
-              Overview
-            </TabsTrigger>
+          <TabsList className="grid w-full grid-cols-3 lg:w-auto lg:grid-cols-3">
             <TabsTrigger value="courses" className="flex items-center gap-2">
               <BookOpen className="h-4 w-4" />
               {userRole === 'learner' ? 'Browse Courses' : 'Course Library'}
@@ -217,171 +213,6 @@ const Dashboard = ({ userRole }: DashboardProps) => {
               </TabsTrigger>
             )}
           </TabsList>
-
-          {/* Overview Tab */}
-          <TabsContent value="overview" className="space-y-6">
-            {/* Quick Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              {getQuickStats().map((stat, index) => (
-                <Card key={index}>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium text-gray-600">
-                      {stat.title}
-                    </CardTitle>
-                    <stat.icon className="h-4 w-4 text-purple-600" />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{stat.value}</div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-
-            {/* Recent Activity / Current Courses */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {userRole === 'learner' ? (
-                <>
-                  {/* Current Courses */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Continue Learning</CardTitle>
-                      <CardDescription>Pick up where you left off</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-3">
-                            <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
-                              <BookOpen className="h-5 w-5 text-purple-600" />
-                            </div>
-                            <div>
-                              <p className="font-medium">Data Analytics Fundamentals</p>
-                              <p className="text-sm text-gray-500">Module 3 of 7</p>
-                            </div>
-                          </div>
-                          <Button size="sm" className="bg-purple-600 hover:bg-purple-700" data-voice="continue">
-                            <Play className="h-4 w-4 mr-1" />
-                            Continue
-                          </Button>
-                        </div>
-                        <Progress value={45} className="h-2" />
-                      </div>
-                      
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-3">
-                            <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                              <BookOpen className="h-5 w-5 text-green-600" />
-                            </div>
-                            <div>
-                              <p className="font-medium">Web Development Bootcamp</p>
-                              <p className="text-sm text-gray-500">Module 1 of 12</p>
-                            </div>
-                          </div>
-                          <Button size="sm" className="bg-purple-600 hover:bg-purple-700" data-voice="continue">
-                            <Play className="h-4 w-4 mr-1" />
-                            Continue
-                          </Button>
-                        </div>
-                        <Progress value={12} className="h-2" />
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Achievements */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Recent Achievements</CardTitle>
-                      <CardDescription>Your learning milestones</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 bg-yellow-100 rounded-full flex items-center justify-center">
-                          <Award className="h-5 w-5 text-yellow-600" />
-                        </div>
-                        <div>
-                          <p className="font-medium">Course Completed</p>
-                          <p className="text-sm text-gray-500">Digital Marketing Mastery</p>
-                        </div>
-                        <Badge variant="secondary">New</Badge>
-                      </div>
-                      
-                      <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
-                          <Award className="h-5 w-5 text-purple-600" />
-                        </div>
-                        <div>
-                          <p className="font-medium">Quiz Master</p>
-                          <p className="text-sm text-gray-500">Scored 95% on final quiz</p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </>
-              ) : (
-                <>
-                  {/* Recent Student Activity */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Recent Student Activity</CardTitle>
-                      <CardDescription>Latest enrollments and completions</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center text-white text-sm font-medium">
-                            JS
-                          </div>
-                          <div>
-                            <p className="font-medium">John Smith enrolled</p>
-                            <p className="text-sm text-gray-500">{courses[0]?.title || 'Course'}</p>
-                          </div>
-                        </div>
-                        <span className="text-sm text-gray-500">2 hours ago</span>
-                      </div>
-                      
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center text-white text-sm font-medium">
-                            MJ
-                          </div>
-                          <div>
-                            <p className="font-medium">Maria Johnson completed</p>
-                            <p className="text-sm text-gray-500">{courses[1]?.title || 'Course'}</p>
-                          </div>
-                        </div>
-                        <span className="text-sm text-gray-500">1 day ago</span>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Top Courses */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Your Top Courses</CardTitle>
-                      <CardDescription>Most popular courses by enrollment</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      {getTopCourses().map((course, index) => (
-                        <div key={course.id} className="flex items-center justify-between">
-                          <div>
-                            <p className="font-medium">{course.title}</p>
-                            <p className="text-sm text-gray-500">{course.students} students • {course.rating > 0 ? `${course.rating}/5 rating` : 'No ratings yet'}</p>
-                          </div>
-                          <Badge variant={index === 0 ? "default" : "secondary"} className={index === 0 ? "bg-purple-600" : ""}>
-                            {index === 0 ? "Most Popular" : "Rising"}
-                          </Badge>
-                        </div>
-                      ))}
-                      {getTopCourses().length === 0 && (
-                        <p className="text-sm text-gray-500">No courses created yet</p>
-                      )}
-                    </CardContent>
-                  </Card>
-                </>
-              )}
-            </div>
-          </TabsContent>
 
           {/* Courses Tab */}
           <TabsContent value="courses">
