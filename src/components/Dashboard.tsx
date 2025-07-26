@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,23 +10,10 @@ import CourseContent from "./CourseContent";
 import CourseManagement from "./CourseManagement";
 import VoiceCommand from "./VoiceCommand";
 import { courses as initialCourses } from "@/data/courses";
+import { Course } from "@/types";
 
 interface DashboardProps {
   userRole: 'learner' | 'educator' | 'admin';
-}
-
-interface Course {
-  id: number;
-  title: string;
-  description: string;
-  category: string;
-  level: string;
-  duration: string;
-  students: number;
-  rating: number;
-  instructor: string;
-  thumbnail: string;
-  content?: any[];
 }
 
 const Dashboard = ({ userRole }: DashboardProps) => {
