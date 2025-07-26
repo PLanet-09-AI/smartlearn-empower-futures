@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -124,6 +125,7 @@ const Dashboard = ({ userRole }: DashboardProps) => {
   };
 
   const handleCoursesUpdate = (updatedCourses: Course[]) => {
+    console.log('Dashboard: Updating courses with:', updatedCourses);
     setCourses(updatedCourses);
   };
 
@@ -228,6 +230,7 @@ const Dashboard = ({ userRole }: DashboardProps) => {
             <TabsContent value="management">
               <CourseManagement 
                 userRole={userRole} 
+                courses={courses}
                 onCoursesUpdate={handleCoursesUpdate}
               />
             </TabsContent>
