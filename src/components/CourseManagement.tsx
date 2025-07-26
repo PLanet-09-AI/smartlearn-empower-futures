@@ -1,72 +1,71 @@
 
-import React, { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Plus, Edit, Trash2, Eye, BookOpen, Users, Star, Clock, Video, FileText, File, X, Upload, Image } from "lucide-react";
-import { courses as initialCourses } from "@/data/courses";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { Plus, Edit, Trash2, Eye, Upload, Save, X } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import { Course, CourseContent, Quiz, QuizQuestion } from "@/types";
 
 interface CourseManagementProps {
-  userRole: 'learner' | 'educator' | 'admin';
+  userRole: 'educator' | 'admin';
+  courses: Course[];
   onCoursesUpdate: (courses: Course[]) => void;
 }
 
-const CourseManagement = ({ userRole, onCoursesUpdate }: CourseManagementProps) => {
-  const [courses, setCourses] = useState<Course[]>(initialCourses);
-  const [quizzes, setQuizzes] = useState<Quiz[]>([]);
-  const [isCreateCourseOpen, setIsCreateCourseOpen] = useState(false);
-  const [isCreateQuizOpen, setIsCreateQuizOpen] = useState(false);
+const CourseManagement = ({ userRole, courses, onCoursesUpdate }: CourseManagementProps) => {
+  const { toast } = useToast();
+  const [isCreating, setIsCreating] = useState(false);
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
-  const [editingContent, setEditingContent] = useState<CourseContent | null>(null);
-  const [editingQuiz, setEditingQuiz] = useState<Quiz | null>(null);
-  const [selectedCourseForContent, setSelectedCourseForContent] = useState<Course | null>(null);
-  const [newContent, setNewContent] = useState<Partial<CourseContent>>({
-    title: '',
-    type: 'video',
-    url: '',
-    content: '',
-    duration: ''
-  });
-
   const [newCourse, setNewCourse] = useState<Partial<Course>>({
-    title: '',
-    description: '',
-    category: '',
-    level: 'Beginner',
-    duration: '',
-    students: 0,
-    rating: 0,
-    instructor: '',
-    thumbnail: '',
-    status: 'draft',
-    content: []
+    title: "",
+    description: "",
+    category: "",
+    level: "Beginner",
+    duration: "",
+    instructor: "",
+    thumbnail: "",
+    content: [],
+    quiz: { id: Date.now(), title: "", questions: [] },
+    status: "draft"
   });
 
-  const [newQuiz, setNewQuiz] = useState<Partial<Quiz>>({
-    title: '',
-    courseId: 0,
-    questions: []
+  // Content management states
+  const [isAddingContent, setIsAddingContent] = useState(false);
+  const [editingContent, setEditingContent] = useState<CourseContent | null>(null);
+  const [newContent, setNewContent] = useState<Partial<CourseContent>>({
+    title: "",
+    type: "text",
+    duration: "",
+    content: ""
   });
 
-  // Image upload handler
+  // Quiz management states
+  const [isAddingQuestion, setIsAddingQuestion] = useState(false);
+  const [editingQuestion, setEditingQuestion] = useState<QuizQuestion | null>(null);
+  const [newQuestion, setNewQuestion] = useState<Partial<QuizQuestion>>({
+    question: "",
+    options: ["", "", "", ""],
+    correctAnswer: 0
+  });
+
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>, isEditing = false) => {
     const file = event.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onload = (e) => {
-        const base64 = e.target?.result as string;
+      reader.onloadend = () => {
+        const base64String = reader.result as string;
         if (isEditing && editingCourse) {
-          setEditingCourse({ ...editingCourse, thumbnail: base64 });
+          setEditingCourse({ ...editingCourse, thumbnail: base64String });
         } else {
-          setNewCourse({ ...newCourse, thumbnail: base64 });
+          setNewCourse({ ...newCourse, thumbnail: base64String });
         }
       };
       reader.readAsDataURL(file);
@@ -74,274 +73,358 @@ const CourseManagement = ({ userRole, onCoursesUpdate }: CourseManagementProps) 
   };
 
   const handleCreateCourse = () => {
-    if (newCourse.title && newCourse.description && newCourse.category) {
-      const course: Course = {
-        id: Date.now(),
-        title: newCourse.title,
-        description: newCourse.description,
-        category: newCourse.category,
-        level: newCourse.level as 'Beginner' | 'Intermediate' | 'Advanced',
-        duration: newCourse.duration || '0 hours',
-        students: 0,
-        rating: 0,
-        instructor: newCourse.instructor || 'Instructor',
-        thumbnail: newCourse.thumbnail || 'https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=400&h=250&fit=crop',
-        status: newCourse.status as 'draft' | 'published' | 'archived',
-        content: [],
-        quiz: {
-          id: Date.now() + 1,
-          title: `${newCourse.title} Quiz`,
-          questions: []
-        }
-      };
-      
-      const updatedCourses = [...courses, course];
-      setCourses(updatedCourses);
-      onCoursesUpdate(updatedCourses);
-      setNewCourse({
-        title: '',
-        description: '',
-        category: '',
-        level: 'Beginner',
-        duration: '',
-        students: 0,
-        rating: 0,
-        instructor: '',
-        thumbnail: '',
-        status: 'draft',
-        content: []
+    if (!newCourse.title || !newCourse.description) {
+      toast({
+        title: "Error",
+        description: "Please fill in all required fields",
+        variant: "destructive",
       });
-      setIsCreateCourseOpen(false);
+      return;
     }
+
+    const course: Course = {
+      id: Date.now(),
+      title: newCourse.title!,
+      description: newCourse.description!,
+      category: newCourse.category || "General",
+      level: newCourse.level as 'Beginner' | 'Intermediate' | 'Advanced',
+      duration: newCourse.duration || "1 hour",
+      rating: 0,
+      students: 0,
+      instructor: newCourse.instructor || "Instructor",
+      thumbnail: newCourse.thumbnail || "/placeholder.svg",
+      content: [],
+      quiz: { id: Date.now(), title: newCourse.title + " Quiz", questions: [] },
+      status: "draft"
+    };
+
+    const updatedCourses = [...courses, course];
+    onCoursesUpdate(updatedCourses);
+    setIsCreating(false);
+    setNewCourse({
+      title: "",
+      description: "",
+      category: "",
+      level: "Beginner",
+      duration: "",
+      instructor: "",
+      thumbnail: "",
+      content: [],
+      quiz: { id: Date.now(), title: "", questions: [] },
+      status: "draft"
+    });
+
+    toast({
+      title: "Success",
+      description: "Course created successfully!",
+    });
+  };
+
+  const handleEditCourse = (course: Course) => {
+    setEditingCourse({ ...course });
   };
 
   const handleUpdateCourse = () => {
-    if (editingCourse) {
-      const updatedCourses = courses.map(course =>
-        course.id === editingCourse.id ? editingCourse : course
-      );
-      setCourses(updatedCourses);
-      onCoursesUpdate(updatedCourses);
-      setEditingCourse(null);
-    }
+    if (!editingCourse) return;
+
+    const updatedCourses = courses.map(course =>
+      course.id === editingCourse.id ? editingCourse : course
+    );
+    onCoursesUpdate(updatedCourses);
+    setEditingCourse(null);
+
+    toast({
+      title: "Success",
+      description: "Course updated successfully!",
+    });
   };
 
   const handleDeleteCourse = (courseId: number) => {
     const updatedCourses = courses.filter(course => course.id !== courseId);
-    setCourses(updatedCourses);
     onCoursesUpdate(updatedCourses);
-    setQuizzes(quizzes.filter(quiz => quiz.courseId !== courseId));
+    
+    toast({
+      title: "Success",
+      description: "Course deleted successfully!",
+    });
   };
 
+  const handlePublishCourse = (courseId: number) => {
+    const updatedCourses = courses.map(course =>
+      course.id === courseId ? { ...course, status: 'published' as const } : course
+    );
+    onCoursesUpdate(updatedCourses);
+
+    toast({
+      title: "Success",
+      description: "Course published successfully!",
+    });
+  };
+
+  // Content management functions
   const handleAddContent = () => {
-    if (selectedCourseForContent && newContent.title && newContent.type) {
-      const content: CourseContent = {
-        id: Date.now(),
-        title: newContent.title,
-        type: newContent.type as 'video' | 'text' | 'pdf',
-        url: newContent.url,
-        content: newContent.content || '',
-        duration: newContent.duration || ''
-      };
-
-      const updatedCourses = courses.map(course => {
-        if (course.id === selectedCourseForContent.id) {
-          return {
-            ...course,
-            content: [...(course.content || []), content]
-          };
-        }
-        return course;
+    if (!editingCourse || !newContent.title || !newContent.content) {
+      toast({
+        title: "Error",
+        description: "Please fill in all content fields",
+        variant: "destructive",
       });
-
-      setCourses(updatedCourses);
-      onCoursesUpdate(updatedCourses);
-      setSelectedCourseForContent(updatedCourses.find(c => c.id === selectedCourseForContent.id) || null);
-      setNewContent({
-        title: '',
-        type: 'video',
-        url: '',
-        content: '',
-        duration: ''
-      });
+      return;
     }
+
+    const content: CourseContent = {
+      id: Date.now(),
+      title: newContent.title!,
+      type: newContent.type as 'text' | 'video' | 'pdf',
+      duration: newContent.duration || "5 min",
+      content: newContent.content!,
+      videoUrl: newContent.videoUrl,
+      url: newContent.url
+    };
+
+    const updatedCourse = {
+      ...editingCourse,
+      content: [...(editingCourse.content || []), content]
+    };
+
+    setEditingCourse(updatedCourse);
+    setIsAddingContent(false);
+    setNewContent({
+      title: "",
+      type: "text",
+      duration: "",
+      content: ""
+    });
+
+    toast({
+      title: "Success",
+      description: "Content added successfully!",
+    });
   };
 
   const handleEditContent = (content: CourseContent) => {
     setEditingContent(content);
+    setNewContent(content);
+    setIsAddingContent(true);
   };
 
   const handleUpdateContent = () => {
-    if (editingContent && selectedCourseForContent) {
-      const updatedCourses = courses.map(course => {
-        if (course.id === selectedCourseForContent.id) {
-          return {
-            ...course,
-            content: course.content.map(item => 
-              item.id === editingContent.id ? editingContent : item
-            )
-          };
-        }
-        return course;
-      });
+    if (!editingCourse || !editingContent) return;
 
-      setCourses(updatedCourses);
-      onCoursesUpdate(updatedCourses);
-      setSelectedCourseForContent(updatedCourses.find(c => c.id === selectedCourseForContent.id) || null);
-      setEditingContent(null);
-    }
-  };
+    const updatedContent = editingCourse.content.map(content =>
+      content.id === editingContent.id ? { ...newContent, id: editingContent.id } as CourseContent : content
+    );
 
-  const handleDeleteContent = (contentId: number) => {
-    if (selectedCourseForContent) {
-      const updatedCourses = courses.map(course => {
-        if (course.id === selectedCourseForContent.id) {
-          return {
-            ...course,
-            content: course.content.filter(item => item.id !== contentId)
-          };
-        }
-        return course;
-      });
-
-      setCourses(updatedCourses);
-      onCoursesUpdate(updatedCourses);
-      setSelectedCourseForContent(updatedCourses.find(c => c.id === selectedCourseForContent.id) || null);
-    }
-  };
-
-  const handleCreateQuiz = () => {
-    if (newQuiz.title && newQuiz.courseId && newQuiz.questions && newQuiz.questions.length > 0) {
-      // Validate that all questions have content and options
-      const isValidQuiz = newQuiz.questions.every(q => 
-        q.question.trim() !== '' && 
-        q.options.every(option => option.trim() !== '') &&
-        q.correctAnswer >= 0 && q.correctAnswer < q.options.length
-      );
-
-      if (!isValidQuiz) {
-        alert('Please fill in all questions, options, and select correct answers');
-        return;
-      }
-
-      const quiz: Quiz = {
-        id: Date.now(),
-        title: newQuiz.title,
-        courseId: newQuiz.courseId,
-        questions: newQuiz.questions.map((q, index) => ({
-          id: index + 1,
-          question: q.question,
-          options: q.options,
-          correctAnswer: q.correctAnswer
-        }))
-      };
-      
-      setQuizzes([...quizzes, quiz]);
-      
-      // Also update the course's quiz
-      const updatedCourses = courses.map(course => {
-        if (course.id === newQuiz.courseId) {
-          return { ...course, quiz };
-        }
-        return course;
-      });
-      setCourses(updatedCourses);
-      onCoursesUpdate(updatedCourses);
-      
-      setNewQuiz({
-        title: '',
-        courseId: 0,
-        questions: []
-      });
-      setIsCreateQuizOpen(false);
-    } else {
-      alert('Please fill in the quiz title, select a course, and add at least one question');
-    }
-  };
-
-  const addQuizQuestion = () => {
-    const newQuestion: QuizQuestion = {
-      id: Date.now(),
-      question: '',
-      options: ['', '', '', ''],
-      correctAnswer: 0
+    const updatedCourse = {
+      ...editingCourse,
+      content: updatedContent
     };
-    setNewQuiz({
-      ...newQuiz,
-      questions: [...(newQuiz.questions || []), newQuestion]
+
+    setEditingCourse(updatedCourse);
+    setEditingContent(null);
+    setIsAddingContent(false);
+    setNewContent({
+      title: "",
+      type: "text",
+      duration: "",
+      content: ""
+    });
+
+    toast({
+      title: "Success",
+      description: "Content updated successfully!",
     });
   };
 
-  const updateQuizQuestion = (index: number, field: keyof QuizQuestion, value: any) => {
-    const updatedQuestions = [...(newQuiz.questions || [])];
-    updatedQuestions[index] = { ...updatedQuestions[index], [field]: value };
-    setNewQuiz({ ...newQuiz, questions: updatedQuestions });
+  const handleDeleteContent = (contentId: number) => {
+    if (!editingCourse) return;
+
+    const updatedContent = editingCourse.content.filter(content => content.id !== contentId);
+    const updatedCourse = {
+      ...editingCourse,
+      content: updatedContent
+    };
+
+    setEditingCourse(updatedCourse);
+
+    toast({
+      title: "Success",
+      description: "Content deleted successfully!",
+    });
   };
 
-  const removeQuizQuestion = (index: number) => {
-    const updatedQuestions = (newQuiz.questions || []).filter((_, i) => i !== index);
-    setNewQuiz({ ...newQuiz, questions: updatedQuestions });
+  // Quiz management functions
+  const handleAddQuestion = () => {
+    if (!editingCourse || !newQuestion.question || newQuestion.options?.some(opt => !opt)) {
+      toast({
+        title: "Error",
+        description: "Please fill in the question and all options",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const question: QuizQuestion = {
+      id: Date.now(),
+      question: newQuestion.question!,
+      options: newQuestion.options as string[],
+      correctAnswer: newQuestion.correctAnswer || 0
+    };
+
+    const updatedQuiz = {
+      ...editingCourse.quiz,
+      questions: [...(editingCourse.quiz.questions || []), question]
+    };
+
+    const updatedCourse = {
+      ...editingCourse,
+      quiz: updatedQuiz
+    };
+
+    setEditingCourse(updatedCourse);
+    setIsAddingQuestion(false);
+    setNewQuestion({
+      question: "",
+      options: ["", "", "", ""],
+      correctAnswer: 0
+    });
+
+    toast({
+      title: "Success",
+      description: "Question added successfully!",
+    });
   };
 
-  const handleDeleteQuiz = (quizId: number) => {
-    setQuizzes(quizzes.filter(quiz => quiz.id !== quizId));
+  const handleEditQuestion = (question: QuizQuestion) => {
+    setEditingQuestion(question);
+    setNewQuestion(question);
+    setIsAddingQuestion(true);
   };
 
-  return (
-    <div className="container mx-auto py-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Course Management</h1>
-          <p className="text-gray-600">Create, edit, and manage your courses</p>
+  const handleUpdateQuestion = () => {
+    if (!editingCourse || !editingQuestion) return;
+
+    const updatedQuestions = editingCourse.quiz.questions.map(question =>
+      question.id === editingQuestion.id ? { ...newQuestion, id: editingQuestion.id } as QuizQuestion : question
+    );
+
+    const updatedQuiz = {
+      ...editingCourse.quiz,
+      questions: updatedQuestions
+    };
+
+    const updatedCourse = {
+      ...editingCourse,
+      quiz: updatedQuiz
+    };
+
+    setEditingCourse(updatedCourse);
+    setEditingQuestion(null);
+    setIsAddingQuestion(false);
+    setNewQuestion({
+      question: "",
+      options: ["", "", "", ""],
+      correctAnswer: 0
+    });
+
+    toast({
+      title: "Success",
+      description: "Question updated successfully!",
+    });
+  };
+
+  const handleDeleteQuestion = (questionId: number) => {
+    if (!editingCourse) return;
+
+    const updatedQuestions = editingCourse.quiz.questions.filter(question => question.id !== questionId);
+    const updatedQuiz = {
+      ...editingCourse.quiz,
+      questions: updatedQuestions
+    };
+
+    const updatedCourse = {
+      ...editingCourse,
+      quiz: updatedQuiz
+    };
+
+    setEditingCourse(updatedCourse);
+
+    toast({
+      title: "Success",
+      description: "Question deleted successfully!",
+    });
+  };
+
+  if (editingCourse) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold">Edit Course: {editingCourse.title}</h2>
+            <p className="text-gray-600">Manage course content and settings</p>
+          </div>
+          <div className="flex gap-2">
+            <Button onClick={handleUpdateCourse} data-voice="save-course">
+              <Save className="h-4 w-4 mr-2" />
+              Save Changes
+            </Button>
+            <Button variant="outline" onClick={() => setEditingCourse(null)}>
+              <X className="h-4 w-4 mr-2" />
+              Cancel
+            </Button>
+          </div>
         </div>
-        <div className="flex space-x-2">
-          <Dialog open={isCreateCourseOpen} onOpenChange={setIsCreateCourseOpen}>
-            <DialogTrigger asChild>
-              <Button className="bg-purple-600 hover:bg-purple-700">
-                <Plus className="h-4 w-4 mr-2" />
-                Create Course
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Create New Course</DialogTitle>
-                <DialogDescription>
-                  Fill in the details to create a new course.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="title">Course Title</Label>
-                  <Input
-                    id="title"
-                    value={newCourse.title}
-                    onChange={(e) => setNewCourse({ ...newCourse, title: e.target.value })}
-                    placeholder="Enter course title"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="description">Description</Label>
-                  <Textarea
-                    id="description"
-                    value={newCourse.description}
-                    onChange={(e) => setNewCourse({ ...newCourse, description: e.target.value })}
-                    placeholder="Enter course description"
-                    rows={3}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="category">Category</Label>
+
+        <Tabs defaultValue="details" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="details">Course Details</TabsTrigger>
+            <TabsTrigger value="content">Content Management</TabsTrigger>
+            <TabsTrigger value="quiz">Quiz Management</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="details">
+            <Card>
+              <CardHeader>
+                <CardTitle>Course Information</CardTitle>
+                <CardDescription>Update basic course details</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="edit-title">Course Title *</Label>
                     <Input
-                      id="category"
-                      value={newCourse.category}
-                      onChange={(e) => setNewCourse({ ...newCourse, category: e.target.value })}
-                      placeholder="e.g., Programming, Design"
+                      id="edit-title"
+                      value={editingCourse.title}
+                      onChange={(e) => setEditingCourse({ ...editingCourse, title: e.target.value })}
+                      placeholder="Enter course title"
                     />
                   </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="level">Level</Label>
-                    <Select value={newCourse.level} onValueChange={(value) => setNewCourse({ ...newCourse, level: value as 'Beginner' | 'Intermediate' | 'Advanced' })}>
+                  <div>
+                    <Label htmlFor="edit-category">Category</Label>
+                    <Input
+                      id="edit-category"
+                      value={editingCourse.category}
+                      onChange={(e) => setEditingCourse({ ...editingCourse, category: e.target.value })}
+                      placeholder="e.g., Technology, Business"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="edit-description">Description *</Label>
+                  <Textarea
+                    id="edit-description"
+                    value={editingCourse.description}
+                    onChange={(e) => setEditingCourse({ ...editingCourse, description: e.target.value })}
+                    placeholder="Describe what students will learn"
+                    rows={4}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <Label htmlFor="edit-level">Level</Label>
+                    <Select value={editingCourse.level} onValueChange={(value: 'Beginner' | 'Intermediate' | 'Advanced') => setEditingCourse({ ...editingCourse, level: value })}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
@@ -352,773 +435,504 @@ const CourseManagement = ({ userRole, onCoursesUpdate }: CourseManagementProps) 
                       </SelectContent>
                     </Select>
                   </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="duration">Duration</Label>
+                  <div>
+                    <Label htmlFor="edit-duration">Duration</Label>
                     <Input
-                      id="duration"
-                      value={newCourse.duration}
-                      onChange={(e) => setNewCourse({ ...newCourse, duration: e.target.value })}
-                      placeholder="e.g., 4 hours, 2 weeks"
+                      id="edit-duration"
+                      value={editingCourse.duration}
+                      onChange={(e) => setEditingCourse({ ...editingCourse, duration: e.target.value })}
+                      placeholder="e.g., 2 hours, 5 days"
                     />
                   </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="instructor">Instructor</Label>
+                  <div>
+                    <Label htmlFor="edit-instructor">Instructor</Label>
                     <Input
-                      id="instructor"
-                      value={newCourse.instructor}
-                      onChange={(e) => setNewCourse({ ...newCourse, instructor: e.target.value })}
+                      id="edit-instructor"
+                      value={editingCourse.instructor}
+                      onChange={(e) => setEditingCourse({ ...editingCourse, instructor: e.target.value })}
                       placeholder="Instructor name"
                     />
                   </div>
                 </div>
-                <div className="grid gap-2">
-                  <Label>Course Thumbnail</Label>
-                  <div className="flex items-center space-x-2">
+
+                <div>
+                  <Label htmlFor="edit-thumbnail">Course Thumbnail</Label>
+                  <div className="flex items-center gap-4 mt-2">
                     <Input
+                      id="edit-thumbnail"
                       type="file"
                       accept="image/*"
-                      onChange={(e) => handleImageUpload(e)}
+                      onChange={(e) => handleImageUpload(e, true)}
                       className="flex-1"
                     />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => document.getElementById('thumbnail-upload')?.click()}
-                    >
-                      <Upload className="h-4 w-4 mr-2" />
-                      Upload
-                    </Button>
+                    {editingCourse.thumbnail && (
+                      <div className="w-20 h-20 border rounded-lg overflow-hidden">
+                        <img 
+                          src={editingCourse.thumbnail} 
+                          alt="Course thumbnail" 
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    )}
                   </div>
-                  {newCourse.thumbnail && (
-                    <div className="mt-2">
-                      <img 
-                        src={newCourse.thumbnail} 
-                        alt="Course thumbnail preview" 
-                        className="w-32 h-20 object-cover rounded border"
-                      />
-                    </div>
-                  )}
                 </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="status">Status</Label>
-                  <Select value={newCourse.status} onValueChange={(value) => setNewCourse({ ...newCourse, status: value as 'draft' | 'published' | 'archived' })}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="draft">Draft</SelectItem>
-                      <SelectItem value="published">Published</SelectItem>
-                      <SelectItem value="archived">Archived</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button onClick={handleCreateCourse} className="bg-purple-600 hover:bg-purple-700">
-                  Create Course
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="content">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold">Course Content</h3>
+                <Button onClick={() => setIsAddingContent(true)} data-voice="add-content">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Content
                 </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-
-          <Dialog open={isCreateQuizOpen} onOpenChange={setIsCreateQuizOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline">
-                <Plus className="h-4 w-4 mr-2" />
-                Create Quiz
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Create New Quiz</DialogTitle>
-                <DialogDescription>
-                  Create a quiz for one of your courses. Add questions with multiple choice answers.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="grid gap-6 py-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="quiz-title">Quiz Title *</Label>
-                  <Input
-                    id="quiz-title"
-                    value={newQuiz.title}
-                    onChange={(e) => setNewQuiz({ ...newQuiz, title: e.target.value })}
-                    placeholder="Enter quiz title"
-                    className={!newQuiz.title ? "border-red-300" : ""}
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="course-select">Select Course *</Label>
-                  <Select value={newQuiz.courseId?.toString()} onValueChange={(value) => setNewQuiz({ ...newQuiz, courseId: parseInt(value) })}>
-                    <SelectTrigger className={!newQuiz.courseId ? "border-red-300" : ""}>
-                      <SelectValue placeholder="Choose a course" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {courses.map(course => (
-                        <SelectItem key={course.id} value={course.id.toString()}>
-                          {course.title}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-base font-medium">Questions *</Label>
-                    <Button onClick={addQuizQuestion} size="sm" variant="outline">
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add Question
-                    </Button>
-                  </div>
-
-                  {(newQuiz.questions || []).length === 0 && (
-                    <div className="text-center py-8 border-2 border-dashed border-gray-200 rounded-lg">
-                      <BookOpen className="mx-auto h-12 w-12 text-gray-400" />
-                      <p className="mt-2 text-sm text-gray-500">No questions added yet</p>
-                      <Button onClick={addQuizQuestion} variant="outline" className="mt-2">
-                        Add Your First Question
-                      </Button>
-                    </div>
-                  )}
-
-                  {(newQuiz.questions || []).map((question, qIndex) => (
-                    <Card key={qIndex} className="border-l-4 border-l-purple-500">
-                      <CardHeader className="pb-3">
-                        <div className="flex items-center justify-between">
-                          <CardTitle className="text-sm font-medium">Question {qIndex + 1}</CardTitle>
-                          <Button
-                            onClick={() => removeQuizQuestion(qIndex)}
-                            size="sm"
-                            variant="ghost"
-                            className="text-red-600 hover:text-red-800"
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                        <div>
-                          <Label className="text-sm font-medium">Question Text *</Label>
-                          <Textarea
-                            value={question.question}
-                            onChange={(e) => updateQuizQuestion(qIndex, 'question', e.target.value)}
-                            placeholder="Enter your question here..."
-                            className={!question.question.trim() ? "border-red-300" : ""}
-                            rows={2}
-                          />
-                        </div>
-                        <div className="space-y-3">
-                          <Label className="text-sm font-medium">Answer Options * (Select the correct answer)</Label>
-                          {question.options.map((option, oIndex) => (
-                            <div key={oIndex} className="flex items-center space-x-3 p-3 border rounded-lg">
-                              <input
-                                type="radio"
-                                name={`correct-${qIndex}`}
-                                checked={question.correctAnswer === oIndex}
-                                onChange={() => updateQuizQuestion(qIndex, 'correctAnswer', oIndex)}
-                                className="text-purple-600 focus:ring-purple-500"
-                              />
-                              <Label className="text-sm font-medium min-w-0 w-16">
-                                Option {oIndex + 1}:
-                              </Label>
-                              <Input
-                                value={option}
-                                onChange={(e) => {
-                                  const newOptions = [...question.options];
-                                  newOptions[oIndex] = e.target.value;
-                                  updateQuizQuestion(qIndex, 'options', newOptions);
-                                }}
-                                placeholder={`Enter option ${oIndex + 1}`}
-                                className={`flex-1 ${!option.trim() ? "border-red-300" : ""} ${question.correctAnswer === oIndex ? "bg-green-50 border-green-300" : ""}`}
-                              />
-                              {question.correctAnswer === oIndex && (
-                                <Badge variant="secondary" className="bg-green-100 text-green-800">
-                                  Correct
-                                </Badge>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </div>
-              <DialogFooter>
-                <div className="flex justify-between w-full">
-                  <p className="text-sm text-gray-500 flex items-center">
-                    {(newQuiz.questions || []).length} question(s) added
-                  </p>
-                  <Button 
-                    onClick={handleCreateQuiz} 
-                    className="bg-purple-600 hover:bg-purple-700"
-                    disabled={!newQuiz.title || !newQuiz.courseId || (newQuiz.questions || []).length === 0}
-                  >
-                    Create Quiz
-                  </Button>
-                </div>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </div>
-      </div>
-
-      <Tabs defaultValue="courses" className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="courses">Courses</TabsTrigger>
-          <TabsTrigger value="content">Course Content</TabsTrigger>
-          <TabsTrigger value="quizzes">Quizzes</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="courses" className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {courses.map((course) => (
-              <Card key={course.id} className="hover:shadow-lg transition-shadow">
-                <div className="relative">
-                  <img 
-                    src={course.thumbnail} 
-                    alt={course.title}
-                    className="w-full h-48 object-cover rounded-t-lg"
-                  />
-                  <div className="absolute top-2 right-2">
-                    <Badge 
-                      variant={course.status === 'published' ? 'default' : course.status === 'draft' ? 'secondary' : 'destructive'}
-                      className={course.status === 'published' ? 'bg-green-500' : course.status === 'draft' ? 'bg-yellow-500' : 'bg-red-500'}
-                    >
-                      {course.status}
-                    </Badge>
-                  </div>
-                </div>
-                
-                <CardHeader>
-                  <CardTitle className="text-lg">{course.title}</CardTitle>
-                  <CardDescription className="line-clamp-2">{course.description}</CardDescription>
-                </CardHeader>
-                
-                <CardContent className="space-y-4">
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center space-x-4">
-                      <div className="flex items-center space-x-1">
-                        <Users className="h-4 w-4" />
-                        <span>{course.students}</span>
-                      </div>
-                      <div className="flex items-center space-x-1">
-                        <Star className="h-4 w-4" />
-                        <span>{course.rating}</span>
-                      </div>
-                      <div className="flex items-center space-x-1">
-                        <Clock className="h-4 w-4" />
-                        <span>{course.duration}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <Badge variant="outline">{course.category}</Badge>
-                    <Badge variant="secondary">{course.level}</Badge>
-                  </div>
-
-                  <div className="flex space-x-2">
-                    <Button
-                      onClick={() => setEditingCourse(course)}
-                      size="sm"
-                      variant="outline"
-                      className="flex-1"
-                    >
-                      <Edit className="h-4 w-4 mr-1" />
-                      Edit
-                    </Button>
-                    
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button size="sm" variant="destructive">
-                          <Trash2 className="h-4 w-4 mr-1" />
-                          Delete
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Delete Course</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Are you sure you want to delete "{course.title}"? This action cannot be undone.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => handleDeleteCourse(course.id)}>
-                            Delete
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </TabsContent>
-
-        <TabsContent value="content" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Manage Course Content</CardTitle>
-              <CardDescription>Add, edit, and organize content for your courses</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-2">
-                <Label>Select Course</Label>
-                <Select 
-                  value={selectedCourseForContent?.id.toString()} 
-                  onValueChange={(value) => {
-                    const course = courses.find(c => c.id === parseInt(value));
-                    setSelectedCourseForContent(course || null);
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Choose a course to manage content" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {courses.map(course => (
-                      <SelectItem key={course.id} value={course.id.toString()}>
-                        {course.title}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
               </div>
 
-              {selectedCourseForContent && (
-                <>
-                  <div className="border-t pt-6">
-                    <h3 className="text-lg font-semibold mb-4">Add New Content</h3>
-                    <div className="space-y-4">
-                      <div className="grid gap-2">
-                        <Label>Content Title</Label>
+              {isAddingContent && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>{editingContent ? 'Edit Content' : 'Add New Content'}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <Label>Content Title *</Label>
                         <Input
                           value={newContent.title}
                           onChange={(e) => setNewContent({ ...newContent, title: e.target.value })}
                           placeholder="Enter content title"
                         />
                       </div>
-
-                      <div className="grid gap-2">
+                      <div>
                         <Label>Content Type</Label>
-                        <Select 
-                          value={newContent.type} 
-                          onValueChange={(value) => setNewContent({ ...newContent, type: value as 'video' | 'text' | 'pdf' })}
-                        >
+                        <Select value={newContent.type} onValueChange={(value: 'text' | 'video' | 'pdf') => setNewContent({ ...newContent, type: value })}>
                           <SelectTrigger>
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="video">Video</SelectItem>
                             <SelectItem value="text">Text</SelectItem>
+                            <SelectItem value="video">Video</SelectItem>
                             <SelectItem value="pdf">PDF</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
+                    </div>
 
-                      {newContent.type === 'video' && (
-                        <div className="grid gap-2">
-                          <Label>YouTube URL</Label>
-                          <Input
-                            value={newContent.url}
-                            onChange={(e) => setNewContent({ ...newContent, url: e.target.value })}
-                            placeholder="https://www.youtube.com/watch?v=..."
-                          />
-                        </div>
-                      )}
+                    <div>
+                      <Label>Duration</Label>
+                      <Input
+                        value={newContent.duration}
+                        onChange={(e) => setNewContent({ ...newContent, duration: e.target.value })}
+                        placeholder="e.g., 10 minutes"
+                      />
+                    </div>
 
-                      {newContent.type === 'text' && (
-                        <div className="grid gap-2">
-                          <Label>Text Content</Label>
-                          <Textarea
-                            value={newContent.content}
-                            onChange={(e) => setNewContent({ ...newContent, content: e.target.value })}
-                            placeholder="Enter your text content here..."
-                            rows={6}
-                          />
-                        </div>
-                      )}
-
-                      {newContent.type === 'pdf' && (
-                        <div className="grid gap-2">
-                          <Label>PDF URL</Label>
-                          <Input
-                            value={newContent.url}
-                            onChange={(e) => setNewContent({ ...newContent, url: e.target.value })}
-                            placeholder="Enter PDF URL"
-                          />
-                        </div>
-                      )}
-
-                      <div className="grid gap-2">
-                        <Label>Duration (optional)</Label>
-                        <Input
-                          value={newContent.duration}
-                          onChange={(e) => setNewContent({ ...newContent, duration: e.target.value })}
-                          placeholder="e.g., 10 minutes"
+                    {newContent.type === 'text' && (
+                      <div>
+                        <Label>Content *</Label>
+                        <Textarea
+                          value={newContent.content}
+                          onChange={(e) => setNewContent({ ...newContent, content: e.target.value })}
+                          placeholder="Enter text content"
+                          rows={6}
                         />
                       </div>
+                    )}
 
-                      <Button 
-                        onClick={handleAddContent} 
-                        className="bg-purple-600 hover:bg-purple-700"
-                        disabled={!newContent.title || !newContent.type}
-                      >
-                        Add Content
-                      </Button>
-                    </div>
-                  </div>
-
-                  {selectedCourseForContent.content && selectedCourseForContent.content.length > 0 && (
-                    <div className="border-t pt-6">
-                      <h3 className="text-lg font-semibold mb-4">Existing Content</h3>
-                      <div className="space-y-3">
-                        {selectedCourseForContent.content.map((item) => (
-                          <Card key={item.id} className="p-4">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center space-x-3">
-                                {item.type === 'video' && <Video className="h-5 w-5 text-red-500" />}
-                                {item.type === 'text' && <FileText className="h-5 w-5 text-blue-500" />}
-                                {item.type === 'pdf' && <File className="h-5 w-5 text-green-500" />}
-                                <div>
-                                  <p className="font-medium">{item.title}</p>
-                                  <p className="text-sm text-gray-500">{item.duration} • {item.type}</p>
-                                </div>
-                              </div>
-                              <div className="flex space-x-2">
-                                <Button
-                                  onClick={() => handleEditContent(item)}
-                                  size="sm"
-                                  variant="outline"
-                                >
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                                <AlertDialog>
-                                  <AlertDialogTrigger asChild>
-                                    <Button size="sm" variant="destructive">
-                                      <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                  </AlertDialogTrigger>
-                                  <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                      <AlertDialogTitle>Delete Content</AlertDialogTitle>
-                                      <AlertDialogDescription>
-                                        Are you sure you want to delete "{item.title}"?
-                                      </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                      <AlertDialogAction onClick={() => handleDeleteContent(item.id)}>
-                                        Delete
-                                      </AlertDialogAction>
-                                    </AlertDialogFooter>
-                                  </AlertDialogContent>
-                                </AlertDialog>
-                              </div>
-                            </div>
-                          </Card>
-                        ))}
+                    {newContent.type === 'video' && (
+                      <div>
+                        <Label>Video URL</Label>
+                        <Input
+                          value={newContent.videoUrl || ''}
+                          onChange={(e) => setNewContent({ ...newContent, videoUrl: e.target.value, content: e.target.value })}
+                          placeholder="Enter video URL"
+                        />
                       </div>
-                    </div>
-                  )}
-                </>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+                    )}
 
-        <TabsContent value="quizzes" className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {quizzes.map((quiz) => (
-              <Card key={quiz.id}>
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
-                    <span>{quiz.title}</span>
-                    <BookOpen className="h-5 w-5 text-purple-600" />
-                  </CardTitle>
-                  <CardDescription>
-                    Course: {courses.find(c => c.id === quiz.courseId)?.title || 'Unknown'}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-600 flex items-center">
-                      <span className="font-medium">{quiz.questions.length}</span>
-                      <span className="ml-1">questions</span>
-                    </span>
-                    <div className="flex space-x-2">
-                      <Button size="sm" variant="outline">
-                        <Eye className="h-4 w-4 mr-1" />
-                        View
+                    {newContent.type === 'pdf' && (
+                      <div>
+                        <Label>PDF URL</Label>
+                        <Input
+                          value={newContent.url || ''}
+                          onChange={(e) => setNewContent({ ...newContent, url: e.target.value, content: e.target.value })}
+                          placeholder="Enter PDF URL"
+                        />
+                      </div>
+                    )}
+
+                    <div className="flex gap-2">
+                      <Button onClick={editingContent ? handleUpdateContent : handleAddContent}>
+                        {editingContent ? 'Update Content' : 'Add Content'}
                       </Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button size="sm" variant="destructive">
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Delete Quiz</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Are you sure you want to delete "{quiz.title}"?
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => handleDeleteQuiz(quiz.id)}>
-                              Delete
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+                      <Button variant="outline" onClick={() => {
+                        setIsAddingContent(false);
+                        setEditingContent(null);
+                        setNewContent({ title: "", type: "text", duration: "", content: "" });
+                      }}>
+                        Cancel
+                      </Button>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-            {quizzes.length === 0 && (
-              <Card className="col-span-full">
-                <CardContent className="text-center py-8">
-                  <BookOpen className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-                  <p className="text-gray-500 mb-4">No quizzes created yet</p>
-                  <Button 
-                    onClick={() => setIsCreateQuizOpen(true)}
-                    variant="outline"
-                  >
-                    Create Your First Quiz
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        </TabsContent>
-      </Tabs>
+                  </CardContent>
+                </Card>
+              )}
 
-      {/* Edit Course Dialog */}
-      {editingCourse && (
-        <Dialog open={!!editingCourse} onOpenChange={() => setEditingCourse(null)}>
-          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Edit Course</DialogTitle>
-              <DialogDescription>
-                Update the course details.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <Label htmlFor="edit-title">Course Title</Label>
+              <div className="space-y-2">
+                {editingCourse.content.map((content, index) => (
+                  <Card key={content.id}>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="secondary">{content.type}</Badge>
+                            <h4 className="font-medium">{content.title}</h4>
+                            <span className="text-sm text-gray-500">({content.duration})</span>
+                          </div>
+                          {content.type === 'text' && (
+                            <p className="text-sm text-gray-600 mt-1 line-clamp-2">{content.content}</p>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="outline" onClick={() => handleEditContent(content)}>
+                            <Edit className="h-3 w-3" />
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => handleDeleteContent(content.id)}>
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+                {editingCourse.content.length === 0 && (
+                  <Card>
+                    <CardContent className="p-8 text-center">
+                      <p className="text-gray-500">No content added yet. Click "Add Content" to get started.</p>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="quiz">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold">Quiz Questions</h3>
+                <Button onClick={() => setIsAddingQuestion(true)} data-voice="add-question">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Question
+                </Button>
+              </div>
+
+              {isAddingQuestion && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>{editingQuestion ? 'Edit Question' : 'Add New Question'}</CardTitle>
+                    <CardDescription>
+                      Create engaging questions to test student knowledge
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div>
+                      <Label>Question *</Label>
+                      <Textarea
+                        value={newQuestion.question}
+                        onChange={(e) => setNewQuestion({ ...newQuestion, question: e.target.value })}
+                        placeholder="Enter your question"
+                        rows={3}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Answer Options *</Label>
+                      {newQuestion.options?.map((option, index) => (
+                        <div key={index} className="flex items-center gap-2">
+                          <span className="w-8 text-sm font-medium">
+                            {String.fromCharCode(65 + index)}.
+                          </span>
+                          <Input
+                            value={option}
+                            onChange={(e) => {
+                              const updatedOptions = [...(newQuestion.options || [])];
+                              updatedOptions[index] = e.target.value;
+                              setNewQuestion({ ...newQuestion, options: updatedOptions });
+                            }}
+                            placeholder={`Option ${String.fromCharCode(65 + index)}`}
+                          />
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="radio"
+                              name="correctAnswer"
+                              checked={newQuestion.correctAnswer === index}
+                              onChange={() => setNewQuestion({ ...newQuestion, correctAnswer: index })}
+                            />
+                            <Label className="text-xs">Correct</Label>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="flex gap-2">
+                      <Button onClick={editingQuestion ? handleUpdateQuestion : handleAddQuestion}>
+                        {editingQuestion ? 'Update Question' : 'Add Question'}
+                      </Button>
+                      <Button variant="outline" onClick={() => {
+                        setIsAddingQuestion(false);
+                        setEditingQuestion(null);
+                        setNewQuestion({ question: "", options: ["", "", "", ""], correctAnswer: 0 });
+                      }}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              <div className="space-y-2">
+                {editingCourse.quiz.questions.map((question, index) => (
+                  <Card key={question.id}>
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <h4 className="font-medium mb-2">Q{index + 1}: {question.question}</h4>
+                          <div className="space-y-1">
+                            {question.options.map((option, optIndex) => (
+                              <div key={optIndex} className="flex items-center gap-2 text-sm">
+                                <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${
+                                  question.correctAnswer === optIndex 
+                                    ? 'bg-green-100 text-green-800' 
+                                    : 'bg-gray-100 text-gray-600'
+                                }`}>
+                                  {String.fromCharCode(65 + optIndex)}
+                                </span>
+                                <span className={question.correctAnswer === optIndex ? 'font-medium text-green-800' : ''}>
+                                  {option}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="outline" onClick={() => handleEditQuestion(question)}>
+                            <Edit className="h-3 w-3" />
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => handleDeleteQuestion(question.id)}>
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+                {editingCourse.quiz.questions.length === 0 && (
+                  <Card>
+                    <CardContent className="p-8 text-center">
+                      <p className="text-gray-500">No questions added yet. Click "Add Question" to create your first quiz question.</p>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            </div>
+          </TabsContent>
+        </Tabs>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold">Course Management</h2>
+          <p className="text-gray-600">
+            {userRole === 'admin' ? 'Manage all courses on the platform' : 'Create and manage your courses'}
+          </p>
+        </div>
+        <Button onClick={() => setIsCreating(true)} data-voice="create-course">
+          <Plus className="h-4 w-4 mr-2" />
+          Create New Course
+        </Button>
+      </div>
+
+      {/* Create Course Form */}
+      {isCreating && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Create New Course</CardTitle>
+            <CardDescription>Fill in the details to create a new course</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="title">Course Title *</Label>
                 <Input
-                  id="edit-title"
-                  value={editingCourse.title}
-                  onChange={(e) => setEditingCourse({ ...editingCourse, title: e.target.value })}
+                  id="title"
+                  value={newCourse.title}
+                  onChange={(e) => setNewCourse({ ...newCourse, title: e.target.value })}
+                  placeholder="Enter course title"
                 />
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="edit-description">Description</Label>
-                <Textarea
-                  id="edit-description"
-                  value={editingCourse.description}
-                  onChange={(e) => setEditingCourse({ ...editingCourse, description: e.target.value })}
-                  rows={3}
+              <div>
+                <Label htmlFor="category">Category</Label>
+                <Input
+                  id="category"
+                  value={newCourse.category}
+                  onChange={(e) => setNewCourse({ ...newCourse, category: e.target.value })}
+                  placeholder="e.g., Technology, Business"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="edit-category">Category</Label>
-                  <Input
-                    id="edit-category"
-                    value={editingCourse.category}
-                    onChange={(e) => setEditingCourse({ ...editingCourse, category: e.target.value })}
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="edit-level">Level</Label>
-                  <Select 
-                    value={editingCourse.level} 
-                    onValueChange={(value) => setEditingCourse({ ...editingCourse, level: value as 'Beginner' | 'Intermediate' | 'Advanced' })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Beginner">Beginner</SelectItem>
-                      <SelectItem value="Intermediate">Intermediate</SelectItem>
-                      <SelectItem value="Advanced">Advanced</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+            </div>
+
+            <div>
+              <Label htmlFor="description">Description *</Label>
+              <Textarea
+                id="description"
+                value={newCourse.description}
+                onChange={(e) => setNewCourse({ ...newCourse, description: e.target.value })}
+                placeholder="Describe what students will learn"
+                rows={4}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <Label htmlFor="level">Level</Label>
+                <Select value={newCourse.level} onValueChange={(value: 'Beginner' | 'Intermediate' | 'Advanced') => setNewCourse({ ...newCourse, level: value })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select level" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Beginner">Beginner</SelectItem>
+                    <SelectItem value="Intermediate">Intermediate</SelectItem>
+                    <SelectItem value="Advanced">Advanced</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="edit-duration">Duration</Label>
-                  <Input
-                    id="edit-duration"
-                    value={editingCourse.duration}
-                    onChange={(e) => setEditingCourse({ ...editingCourse, duration: e.target.value })}
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="edit-instructor">Instructor</Label>
-                  <Input
-                    id="edit-instructor"
-                    value={editingCourse.instructor}
-                    onChange={(e) => setEditingCourse({ ...editingCourse, instructor: e.target.value })}
-                  />
-                </div>
+              <div>
+                <Label htmlFor="duration">Duration</Label>
+                <Input
+                  id="duration"
+                  value={newCourse.duration}
+                  onChange={(e) => setNewCourse({ ...newCourse, duration: e.target.value })}
+                  placeholder="e.g., 2 hours, 5 days"
+                />
               </div>
-              <div className="grid gap-2">
-                <Label>Course Thumbnail</Label>
-                <div className="flex items-center space-x-2">
-                  <Input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => handleImageUpload(e, true)}
-                    className="flex-1"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      const input = document.createElement('input');
-                      input.type = 'file';
-                      input.accept = 'image/*';
-                      input.onchange = (e) => handleImageUpload(e as any, true);
-                      input.click();
-                    }}
-                  >
-                    <Upload className="h-4 w-4 mr-2" />
-                    Upload
-                  </Button>
-                </div>
-                {editingCourse.thumbnail && (
-                  <div className="mt-2">
+              <div>
+                <Label htmlFor="instructor">Instructor</Label>
+                <Input
+                  id="instructor"
+                  value={newCourse.instructor}
+                  onChange={(e) => setNewCourse({ ...newCourse, instructor: e.target.value })}
+                  placeholder="Instructor name"
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="thumbnail">Course Thumbnail</Label>
+              <div className="flex items-center gap-4 mt-2">
+                <Input
+                  id="thumbnail"
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => handleImageUpload(e)}
+                  className="flex-1"
+                />
+                {newCourse.thumbnail && (
+                  <div className="w-20 h-20 border rounded-lg overflow-hidden">
                     <img 
-                      src={editingCourse.thumbnail} 
-                      alt="Course thumbnail preview" 
-                      className="w-32 h-20 object-cover rounded border"
+                      src={newCourse.thumbnail} 
+                      alt="Course thumbnail" 
+                      className="w-full h-full object-cover"
                     />
                   </div>
                 )}
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="edit-status">Status</Label>
-                <Select 
-                  value={editingCourse.status} 
-                  onValueChange={(value) => setEditingCourse({ ...editingCourse, status: value as 'draft' | 'published' | 'archived' })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="draft">Draft</SelectItem>
-                    <SelectItem value="published">Published</SelectItem>
-                    <SelectItem value="archived">Archived</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
             </div>
-            <DialogFooter>
-              <Button onClick={handleUpdateCourse} className="bg-purple-600 hover:bg-purple-700">
-                Update Course
+
+            <div className="flex gap-2">
+              <Button onClick={handleCreateCourse}>Create Course</Button>
+              <Button variant="outline" onClick={() => setIsCreating(false)}>
+                Cancel
               </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
-      {/* Edit Content Dialog */}
-      {editingContent && (
-        <Dialog open={!!editingContent} onOpenChange={() => setEditingContent(null)}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Edit Content</DialogTitle>
-              <DialogDescription>
-                Update the content details.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <Label>Content Title</Label>
-                <Input
-                  value={editingContent.title}
-                  onChange={(e) => setEditingContent({ ...editingContent, title: e.target.value })}
-                  placeholder="Enter content title"
-                />
-              </div>
-
-              <div className="grid gap-2">
-                <Label>Content Type</Label>
-                <Select 
-                  value={editingContent.type} 
-                  onValueChange={(value) => setEditingContent({ ...editingContent, type: value as 'video' | 'text' | 'pdf' })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="video">Video</SelectItem>
-                    <SelectItem value="text">Text</SelectItem>
-                    <SelectItem value="pdf">PDF</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {editingContent.type === 'video' && (
-                <div className="grid gap-2">
-                  <Label>YouTube URL</Label>
-                  <Input
-                    value={editingContent.url || ''}
-                    onChange={(e) => setEditingContent({ ...editingContent, url: e.target.value })}
-                    placeholder="https://www.youtube.com/watch?v=..."
-                  />
-                </div>
-              )}
-
-              {editingContent.type === 'text' && (
-                <div className="grid gap-2">
-                  <Label>Text Content</Label>
-                  <Textarea
-                    value={editingContent.content}
-                    onChange={(e) => setEditingContent({ ...editingContent, content: e.target.value })}
-                    placeholder="Enter your text content here..."
-                    rows={6}
-                  />
-                </div>
-              )}
-
-              {editingContent.type === 'pdf' && (
-                <div className="grid gap-2">
-                  <Label>PDF URL</Label>
-                  <Input
-                    value={editingContent.url || ''}
-                    onChange={(e) => setEditingContent({ ...editingContent, url: e.target.value })}
-                    placeholder="Enter PDF URL"
-                  />
-                </div>
-              )}
-
-              <div className="grid gap-2">
-                <Label>Duration</Label>
-                <Input
-                  value={editingContent.duration}
-                  onChange={(e) => setEditingContent({ ...editingContent, duration: e.target.value })}
-                  placeholder="e.g., 10 minutes"
-                />
-              </div>
+      {/* Courses Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {courses.map((course) => (
+          <Card key={course.id} className="relative">
+            <div className="absolute top-2 right-2 z-10">
+              <Badge variant={course.status === 'published' ? 'default' : 'secondary'}>
+                {course.status}
+              </Badge>
             </div>
-            <DialogFooter>
-              <Button onClick={handleUpdateContent} className="bg-purple-600 hover:bg-purple-700">
-                Update Content
+            
+            <div className="aspect-video relative overflow-hidden rounded-t-lg">
+              <img 
+                src={course.thumbnail} 
+                alt={course.title}
+                className="w-full h-full object-cover"
+              />
+            </div>
+            
+            <CardContent className="p-4">
+              <h3 className="font-semibold text-lg mb-2 line-clamp-2">{course.title}</h3>
+              <p className="text-gray-600 text-sm mb-3 line-clamp-2">{course.description}</p>
+              
+              <div className="flex items-center justify-between text-sm text-gray-500 mb-4">
+                <span>{course.level}</span>
+                <span>{course.duration}</span>
+              </div>
+              
+              <div className="flex items-center justify-between text-sm text-gray-600 mb-4">
+                <span>{course.students} students</span>
+                <span>★ {course.rating}/5</span>
+              </div>
+
+              <Separator className="mb-4" />
+              
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={() => handleEditCourse(course)}>
+                  <Edit className="h-3 w-3 mr-1" />
+                  Edit
+                </Button>
+                
+                {course.status === 'draft' && (
+                  <Button size="sm" onClick={() => handlePublishCourse(course.id)} data-voice="publish-course">
+                    <Eye className="h-3 w-3 mr-1" />
+                    Publish
+                  </Button>
+                )}
+                
+                <Button size="sm" variant="outline" onClick={() => handleDeleteCourse(course.id)}>
+                  <Trash2 className="h-3 w-3 mr-1" />
+                  Delete
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+        
+        {courses.length === 0 && (
+          <Card className="col-span-full">
+            <CardContent className="p-12 text-center">
+              <h3 className="text-lg font-semibold mb-2">No courses created yet</h3>
+              <p className="text-gray-600 mb-4">Get started by creating your first course!</p>
+              <Button onClick={() => setIsCreating(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Create Your First Course
               </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
+            </CardContent>
+          </Card>
+        )}
+      </div>
     </div>
   );
 };
