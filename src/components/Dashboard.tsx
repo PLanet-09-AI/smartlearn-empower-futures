@@ -156,6 +156,7 @@ const Dashboard = ({ userRole }: DashboardProps) => {
   };
 
   const handleCoursesUpdate = (updatedCourses: Course[]) => {
+    console.log('Dashboard: Updating courses with:', updatedCourses);
     setCourses(updatedCourses);
   };
 
@@ -269,6 +270,7 @@ const Dashboard = ({ userRole }: DashboardProps) => {
             <TabsContent value="management">
               <CourseManagement 
                 userRole={userRole} 
+                courses={courses}
                 onCoursesUpdate={handleCoursesUpdate}
               />
             </TabsContent>

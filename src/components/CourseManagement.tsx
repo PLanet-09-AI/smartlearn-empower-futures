@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
@@ -17,7 +17,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
 interface CourseManagementProps {
-  userRole: 'learner' | 'educator' | 'admin';
+  userRole: 'educator' | 'admin';
+  courses: Course[];
   onCoursesUpdate: (courses: Course[]) => void;
 }
 
@@ -800,23 +801,21 @@ const CourseManagement = ({ userRole, onCoursesUpdate }: CourseManagementProps) 
                       </SelectContent>
                     </Select>
                   </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="duration">Duration</Label>
+                  <div>
+                    <Label htmlFor="edit-duration">Duration</Label>
                     <Input
-                      id="duration"
-                      value={newCourse.duration}
-                      onChange={(e) => setNewCourse({ ...newCourse, duration: e.target.value })}
-                      placeholder="e.g., 4 hours, 2 weeks"
+                      id="edit-duration"
+                      value={editingCourse.duration}
+                      onChange={(e) => setEditingCourse({ ...editingCourse, duration: e.target.value })}
+                      placeholder="e.g., 2 hours, 5 days"
                     />
                   </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="instructor">Instructor</Label>
+                  <div>
+                    <Label htmlFor="edit-instructor">Instructor</Label>
                     <Input
-                      id="instructor"
-                      value={newCourse.instructor}
-                      onChange={(e) => setNewCourse({ ...newCourse, instructor: e.target.value })}
+                      id="edit-instructor"
+                      value={editingCourse.instructor}
+                      onChange={(e) => setEditingCourse({ ...editingCourse, instructor: e.target.value })}
                       placeholder="Instructor name"
                     />
                   </div>
