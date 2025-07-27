@@ -11,7 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Video, FileText, BookOpen } from "lucide-react";
 
 interface Course {
-  id: number;
+  id: string;
+  firebaseId?: string;
   title: string;
   description: string;
   category: string;
@@ -26,7 +27,7 @@ interface Course {
 
 interface CourseLibraryProps {
   userRole: 'learner' | 'educator' | 'admin';
-  onCourseSelect: (courseId: number) => void;
+  onCourseSelect: (courseId: string) => void;
   courses: Course[];
 }
 
@@ -137,6 +138,7 @@ const CourseLibrary = ({ userRole, onCourseSelect, courses }: CourseLibraryProps
                   key={course.id} 
                   className="cursor-pointer transition-all duration-300 hover:shadow-lg hover:scale-[1.02] hover:border-purple-300" 
                   onClick={() => onCourseSelect(course.id)}
+                  title={course.firebaseId ? `Course ID: ${course.id}, Firebase ID: ${course.firebaseId}` : `Course ID: ${course.id}`}
                 >
                   <div className="relative overflow-hidden">
                     <img 
@@ -213,6 +215,13 @@ const CourseLibrary = ({ userRole, onCourseSelect, courses }: CourseLibraryProps
                         </div>
                       </div>
                     )}
+                    
+                    {/* Firebase ID indicator for admin/educator */}
+                    {userRole !== 'learner' && course.firebaseId && (
+                      <div className="mt-1 text-xs text-gray-400">
+                        ID: {course.firebaseId.substring(0, 6)}...
+                      </div>
+                    )}
 
                     {/* Enhanced Action Button */}
                     <div className="pt-2">
@@ -221,6 +230,7 @@ const CourseLibrary = ({ userRole, onCourseSelect, courses }: CourseLibraryProps
                         onClick={(e) => {
                           e.stopPropagation();
                           onCourseSelect(course.id);
+                          console.log(`Selected course: ID=${course.id}, FirebaseID=${course.firebaseId || 'none'}`);
                         }}
                       >
                         {userRole === 'learner' ? 'Enroll Now' : 'View Course'}

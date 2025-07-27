@@ -1,6 +1,7 @@
 
 import { GraduationCap, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import FirebaseStatus from "./FirebaseStatus";
 
 interface HeaderProps {
   isLoggedIn: boolean;
@@ -26,7 +27,10 @@ const Header = ({ isLoggedIn, onLogout }: HeaderProps) => {
             </div>
             <div>
               <h1 className="text-xl font-bold text-gray-900">eTAIN SmartLearn</h1>
-              <p className="text-sm text-gray-600">Empowering Digital Futures</p>
+              <div className="flex items-center gap-2">
+                <p className="text-sm text-gray-600">Empowering Digital Futures</p>
+                {isLoggedIn && <FirebaseStatus />}
+              </div>
             </div>
           </div>
           

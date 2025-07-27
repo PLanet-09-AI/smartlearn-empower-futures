@@ -1,6 +1,7 @@
 
 export interface Course {
-  id: number;
+  id: string;
+  firebaseId?: string; // Added to store Firebase document ID separately
   title: string;
   description: string;
   category: string;
@@ -16,7 +17,7 @@ export interface Course {
 }
 
 export interface CourseContent {
-  id: number;
+  id: string;
   title: string;
   type: 'text' | 'video' | 'pdf';
   duration: string;
@@ -26,14 +27,14 @@ export interface CourseContent {
 }
 
 export interface Quiz {
-  id: number;
+  id: string;
   title: string;
-  courseId?: number;
+  courseId?: string;
   questions: QuizQuestion[];
 }
 
 export interface QuizQuestion {
-  id: number;
+  id: string;
   question: string;
   options: string[];
   correctAnswer: number;

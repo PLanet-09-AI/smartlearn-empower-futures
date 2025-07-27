@@ -1,35 +1,27 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, Play, FileText, CheckCircle, Clock, Award, Volume2, VolumeX } from "lucide-react";
+import { ArrowLeft, Play, FileText, CheckCircle, Clock, Award, Volume2, VolumeX, Loader2 } from "lucide-react";
 import { speakText, stopSpeaking, isSpeechSupported } from "@/utils/textToSpeech";
 import { Course } from "@/types";
-import { courses } from "@/data/courses";
+import { courseService } from "@/services/courseService";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface CourseContentProps {
-  courseId: number;
+  courseId: string;
   onBack: () => void;
   userRole: 'learner' | 'educator' | 'admin';
 }
 
 const CourseContent = ({ courseId, onBack, userRole }: CourseContentProps) => {
-  const course = courses.find(c => c.id === courseId);
-
-  if (!course) {
-    return (
-      <div className="max-w-4xl mx-auto p-6">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold mb-4">Course not found</h2>
-          <Button onClick={onBack}>Back to Courses</Button>
-        </div>
-      </div>
-    );
-  }
-
+  const { currentUser } = useAuth();
+  const [course, setCourse] = useState<Course | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [currentContentIndex, setCurrentContentIndex] = useState(0);
-  const [completedContent, setCompletedContent] = useState<number[]>([]);
+  const [completedContent, setCompletedContent] = useState<string[]>([]);
   const [showQuiz, setShowQuiz] = useState(false);
   const [quizAnswers, setQuizAnswers] = useState<number[]>([]);
   const [quizCompleted, setQuizCompleted] = useState(false);
@@ -37,8 +29,85 @@ const CourseContent = ({ courseId, onBack, userRole }: CourseContentProps) => {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [videoEnded, setVideoEnded] = useState(false);
 
-  const currentContent = course.content[currentContentIndex];
-  const progress = (completedContent.length / course.content.length) * 100;
+  // Fetch course data from Firebase
+  useEffect(() => {
+    const fetchCourse = async () => {
+      setLoading(true);
+      try {
+        console.log("Fetching course with ID:", courseId);
+        
+        // Get all courses first to have the complete set with both ID types
+        const allCourses = await courseService.getCourses('admin');
+        console.log("All available courses:", allCourses.length);
+        
+        // First try to find the course by numeric ID
+        let fetchedCourse = allCourses.find(c => c.id === courseId);
+        
+        if (fetchedCourse) {
+          console.log("Course found by numeric ID:", fetchedCourse.title);
+          setCourse(fetchedCourse);
+        } else {
+          // Try by string ID
+          const idAsString = courseId.toString();
+          fetchedCourse = allCourses.find(c => c.firebaseId === idAsString);
+          
+          if (fetchedCourse) {
+            console.log("Course found by Firebase ID:", fetchedCourse);
+            setCourse(fetchedCourse);
+          } else {
+            // As a last resort, try direct lookup by ID
+            console.log("Course not found in loaded courses. Trying direct lookup...");
+            fetchedCourse = await courseService.getCourse(idAsString);
+            
+            if (fetchedCourse) {
+              console.log("Course fetched successfully via direct lookup:", fetchedCourse);
+              setCourse(fetchedCourse);
+            } else {
+              console.error("Course not found with ID:", courseId);
+              setError('Course not found. Please check that the course exists.');
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching course:', err);
+        setError('Failed to load course data. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCourse();
+  }, [courseId]);
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="max-w-4xl mx-auto p-6">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
+          <h2 className="text-lg font-medium">Loading course content...</h2>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error || !course) {
+    return (
+      <div className="max-w-4xl mx-auto p-6">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold mb-4">{error || "Course not found"}</h2>
+          <Button onClick={onBack}>Back to Courses</Button>
+        </div>
+      </div>
+    );
+  }
+
+  // These computed values need to be safely accessed since course might be null at first
+  const currentContent = course?.content && course.content.length > 0 ? 
+    course.content[currentContentIndex] : null;
+  const progress = course?.content && course.content.length > 0 ?
+    (completedContent.length / course.content.length) * 100 : 0;
   const speechSupported = isSpeechSupported();
 
   const handleSpeak = (text: string) => {
@@ -56,15 +125,20 @@ const CourseContent = ({ courseId, onBack, userRole }: CourseContentProps) => {
     }
   };
 
-  const markContentComplete = () => {
-    if (!completedContent.includes(currentContent.id)) {
-      setCompletedContent([...completedContent, currentContent.id]);
+  const markContentComplete = async () => {
+    if (currentContent && !completedContent.includes(currentContent.id)) {
+      const newCompletedContent = [...completedContent, currentContent.id];
+      setCompletedContent(newCompletedContent);
+      
+      // Update progress in user's profile if needed
+      // This could be implemented to save progress to Firebase
+      // Example: if (currentUser) { updateUserProgress(courseId, currentContent.id); }
     }
   };
 
   const nextContent = () => {
     markContentComplete();
-    if (currentContentIndex < course.content.length - 1) {
+    if (course?.content && currentContentIndex < course.content.length - 1) {
       setCurrentContentIndex(currentContentIndex + 1);
       setVideoEnded(false);
     } else {
@@ -90,19 +164,35 @@ const CourseContent = ({ courseId, onBack, userRole }: CourseContentProps) => {
     setQuizAnswers(newAnswers);
   };
 
-  const submitQuiz = () => {
+  const submitQuiz = async () => {
+    if (!course?.quiz || !course.quiz.questions) return;
+    
     let correct = 0;
-    course.quiz.questions.forEach((question: any, index: number) => {
+    course.quiz.questions.forEach((question, index: number) => {
       if (quizAnswers[index] === question.correctAnswer) {
         correct++;
       }
     });
+    
     const score = Math.round((correct / course.quiz.questions.length) * 100);
     setQuizScore(score);
     setQuizCompleted(true);
+    
+    // Save quiz results to Firebase if the user is authenticated
+    if (currentUser) {
+      try {
+        // Example implementation - you would need to create this method in your service
+        // await courseService.saveQuizResult(course.id.toString(), currentUser.uid, score);
+        console.log('Quiz completed with score:', score);
+      } catch (error) {
+        console.error('Error saving quiz results:', error);
+      }
+    }
   };
 
-  const canSubmitQuiz = quizAnswers.length === course.quiz.questions.length;
+  const canSubmitQuiz = course?.quiz && course.quiz.questions && 
+    quizAnswers.length === course.quiz.questions.length && 
+    quizAnswers.every(answer => answer !== undefined);
 
   if (showQuiz) {
     return (
@@ -139,7 +229,7 @@ const CourseContent = ({ courseId, onBack, userRole }: CourseContentProps) => {
           <CardContent className="space-y-6">
             {!quizCompleted ? (
               <>
-                {course.quiz.questions.map((question: any, questionIndex: number) => (
+                {course.quiz && course.quiz.questions && course.quiz.questions.map((question, questionIndex: number) => (
                   <div key={question.id} className="space-y-4">
                     <div className="flex items-center justify-between">
                       <h3 className="font-medium">
@@ -159,12 +249,15 @@ const CourseContent = ({ courseId, onBack, userRole }: CourseContentProps) => {
                       {question.options.map((option: string, optionIndex: number) => (
                         <label 
                           key={optionIndex}
-                          className="flex items-center space-x-2 p-3 border rounded cursor-pointer hover:bg-gray-50"
+                          className={`flex items-center space-x-2 p-3 border rounded cursor-pointer hover:bg-gray-50 ${
+                            quizAnswers[questionIndex] === optionIndex ? 'bg-blue-50 border-blue-300' : ''
+                          }`}
                         >
                           <input
                             type="radio"
                             name={`question-${questionIndex}`}
                             value={optionIndex}
+                            checked={quizAnswers[questionIndex] === optionIndex}
                             onChange={() => handleQuizAnswer(questionIndex, optionIndex)}
                             className="text-blue-600"
                           />
@@ -233,7 +326,7 @@ const CourseContent = ({ courseId, onBack, userRole }: CourseContentProps) => {
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back to Courses
         </Button>
-        <Badge variant="secondary">{course.category}</Badge>
+        <Badge variant="secondary">{course?.category}</Badge>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -244,14 +337,14 @@ const CourseContent = ({ courseId, onBack, userRole }: CourseContentProps) => {
               <CardTitle className="text-sm">Course Progress</CardTitle>
               <Progress value={progress} className="w-full" />
               <p className="text-xs text-gray-600">
-                {completedContent.length} of {course.content.length} completed
+                {completedContent.length} of {course?.content?.length || 0} completed
               </p>
             </CardHeader>
             <CardContent className="space-y-2">
-              {course.content.map((content: any, index: number) => (
-                <div
+              {course?.content && course.content.map((content, index) => (
+                <button
                   key={content.id}
-                  className={`flex items-center space-x-2 p-2 rounded cursor-pointer text-sm ${
+                  className={`flex items-center w-full text-left space-x-2 p-2 rounded cursor-pointer text-sm ${
                     index === currentContentIndex ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-50'
                   }`}
                   onClick={() => {
@@ -268,25 +361,30 @@ const CourseContent = ({ courseId, onBack, userRole }: CourseContentProps) => {
                   {completedContent.includes(content.id) && (
                     <CheckCircle className="h-4 w-4 text-green-600" />
                   )}
-                </div>
+                </button>
               ))}
               
-              <div
-                className={`flex items-center space-x-2 p-2 rounded cursor-pointer text-sm ${
+              <button
+                className={`flex items-center w-full text-left space-x-2 p-2 rounded text-sm ${
                   showQuiz ? 'bg-yellow-100 text-yellow-700' : 'hover:bg-gray-50'
-                } ${completedContent.length < course.content.length ? 'opacity-50 cursor-not-allowed' : ''}`}
+                } ${completedContent.length < (course?.content?.length || 0) ? 'opacity-50 cursor-not-allowed' : ''}`}
                 onClick={() => {
-                  if (completedContent.length === course.content.length) {
+                  if (course?.content && completedContent.length === course.content.length) {
                     setShowQuiz(true);
                   }
                 }}
+                disabled={course?.content ? completedContent.length < course.content.length : true}
+                aria-label={course?.content && completedContent.length < course.content.length ? 
+                  "Complete all content before taking the quiz" : "Take final quiz"}
+                title={course?.content && completedContent.length < course.content.length ? 
+                  "Complete all content before taking the quiz" : "Take final quiz"}
               >
                 <Award className="h-4 w-4" />
                 <span>Final Quiz</span>
                 {quizCompleted && (
                   <CheckCircle className="h-4 w-4 text-green-600" />
                 )}
-              </div>
+              </button>
             </CardContent>
           </Card>
         </div>
@@ -296,9 +394,9 @@ const CourseContent = ({ courseId, onBack, userRole }: CourseContentProps) => {
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle>{currentContent.title}</CardTitle>
+                <CardTitle>{currentContent?.title}</CardTitle>
                 <div className="flex items-center space-x-2">
-                  {speechSupported && currentContent.type === 'text' && (
+                  {speechSupported && currentContent?.type === 'text' && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -308,12 +406,12 @@ const CourseContent = ({ courseId, onBack, userRole }: CourseContentProps) => {
                       {isSpeaking ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
                     </Button>
                   )}
-                  {currentContent.type === 'video' ? (
+                  {currentContent?.type === 'video' ? (
                     <Play className="h-4 w-4" />
                   ) : (
                     <FileText className="h-4 w-4" />
                   )}
-                  {currentContent.duration && (
+                  {currentContent?.duration && (
                     <div className="flex items-center text-sm text-gray-600">
                       <Clock className="h-4 w-4 mr-1" />
                       {currentContent.duration}
@@ -323,44 +421,50 @@ const CourseContent = ({ courseId, onBack, userRole }: CourseContentProps) => {
               </div>
             </CardHeader>
             <CardContent className="space-y-6">
-              {currentContent.type === 'video' ? (
-                <div className="aspect-video bg-gray-900 rounded-lg overflow-hidden">
-                  <iframe
-                    className="w-full h-full"
-                    src={currentContent.videoUrl}
-                    title={currentContent.title}
-                    frameBorder="0"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                    onLoad={() => {
-                      // Mark video as completed after a delay to simulate watching
-                      setTimeout(() => {
-                        handleVideoEnded();
-                      }, 2000);
-                    }}
-                  ></iframe>
-                </div>
-              ) : (
-                <div className="prose max-w-none">
-                  <div className="bg-gray-50 p-6 rounded-lg">
-                    <div className="flex items-center justify-between mb-4">
-                      <FileText className="h-8 w-8 text-blue-600" />
-                      {speechSupported && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleSpeak(currentContent.content)}
-                          title="Listen to this content"
-                        >
-                          {isSpeaking ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-                          <span className="ml-1 text-xs">Listen</span>
-                        </Button>
-                      )}
-                    </div>
-                    <div className="whitespace-pre-line text-gray-700 leading-relaxed">
-                      {currentContent.content}
+              {currentContent ? (
+                currentContent?.type === 'video' ? (
+                  <div className="aspect-video bg-gray-900 rounded-lg overflow-hidden">
+                    <iframe
+                      className="w-full h-full"
+                      src={currentContent?.videoUrl}
+                      title={currentContent?.title}
+                      frameBorder="0"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                      onLoad={() => {
+                        // Mark video as completed after a delay to simulate watching
+                        setTimeout(() => {
+                          handleVideoEnded();
+                        }, 2000);
+                      }}
+                    ></iframe>
+                  </div>
+                ) : (
+                  <div className="prose max-w-none">
+                    <div className="bg-gray-50 p-6 rounded-lg">
+                      <div className="flex items-center justify-between mb-4">
+                        <FileText className="h-8 w-8 text-blue-600" />
+                        {speechSupported && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleSpeak(currentContent?.content || "")}
+                            title="Listen to this content"
+                          >
+                            {isSpeaking ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                            <span className="ml-1 text-xs">Listen</span>
+                          </Button>
+                        )}
+                      </div>
+                      <div className="whitespace-pre-line text-gray-700 leading-relaxed">
+                        {currentContent?.content}
+                      </div>
                     </div>
                   </div>
+                )
+              ) : (
+                <div className="text-center py-8">
+                  <p>No content available</p>
                 </div>
               )}
 
@@ -373,16 +477,21 @@ const CourseContent = ({ courseId, onBack, userRole }: CourseContentProps) => {
                   Previous
                 </Button>
                 
-                <span className="text-sm text-gray-600">
-                  {currentContentIndex + 1} of {course.content.length}
-                </span>
-                
-                <Button 
+                  {course?.content && course.content.length > 0 && (
+                  <span className="text-sm text-gray-600">
+                    {currentContentIndex + 1} of {course.content.length}
+                  </span>
+                )}                <Button 
                   onClick={nextContent}
                   className="bg-blue-600 hover:bg-blue-700"
-                  disabled={currentContent.type === 'video' && !videoEnded && !completedContent.includes(currentContent.id)}
+                  disabled={
+                    !currentContent || 
+                    (currentContent.type === 'video' && 
+                    !videoEnded && 
+                    !completedContent.includes(currentContent.id))
+                  }
                 >
-                  {currentContentIndex === course.content.length - 1 ? 'Take Quiz' : 'Next'}
+                  {course.content && currentContentIndex === course.content.length - 1 ? 'Take Quiz' : 'Next'}
                 </Button>
               </div>
             </CardContent>

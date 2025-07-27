@@ -4,35 +4,62 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { BookOpen, Users, TrendingUp, Clock, Play, Award, Settings, FileQuestion, BarChart3 } from "lucide-react";
+import { BookOpen, Users, TrendingUp, Clock, Play, Award, Settings, FileQuestion, BarChart3, Database, Loader2 } from "lucide-react";
 import CourseLibrary from "./CourseLibrary";
 import CourseContent from "./CourseContent";
 import CourseManagement from "./CourseManagement";
 import VoiceCommand from "./VoiceCommand";
-import { courses as initialCourses } from "@/data/courses";
+import FirebaseDebugger from "./FirebaseDebugger";
+import { courseService } from "@/services/courseService";
+import { useAuth } from "@/contexts/AuthContext";
+import { Course } from "@/types";
 
 interface DashboardProps {
   userRole: 'learner' | 'educator' | 'admin';
 }
 
-interface Course {
-  id: number;
-  title: string;
-  description: string;
-  category: string;
-  level: string;
-  duration: string;
-  students: number;
-  rating: number;
-  instructor: string;
-  thumbnail: string;
-  content?: any[];
-}
-
 const Dashboard = ({ userRole }: DashboardProps) => {
+  const { currentUser } = useAuth();
   const [activeTab, setActiveTab] = useState("courses");
-  const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
-  const [courses, setCourses] = useState<Course[]>(initialCourses);
+  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  // Load courses from Firebase
+  useEffect(() => {
+    const loadCourses = async () => {
+      setLoading(true);
+      try {
+        // Use admin role to get all courses for the dashboard
+        const firebaseCourses = await courseService.getCourses(userRole, currentUser?.uid);
+        console.log("Loaded courses from Firebase:", firebaseCourses.length);
+        
+        // Verify each course has expected data structure
+        const validatedCourses = firebaseCourses.map(course => {
+          // Ensure content is an array
+          if (!course.content) course.content = [];
+          // Ensure quiz exists
+          if (!course.quiz) {
+            course.quiz = {
+              id: `${course.id}_quiz`,
+              title: `${course.title} Quiz`,
+              questions: []
+            };
+          }
+          return course;
+        });
+        
+        setCourses(validatedCourses);
+      } catch (error) {
+        console.error('Error loading courses:', error);
+        setCourses([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadCourses();
+  }, [currentUser, userRole]);
 
   // Voice command event listeners
   useEffect(() => {
@@ -118,9 +145,14 @@ const Dashboard = ({ userRole }: DashboardProps) => {
       .slice(0, 2);
   };
 
-  const handleCourseSelect = (courseId: number) => {
-    setSelectedCourseId(courseId);
-    setActiveTab("course-content");
+  const handleCourseSelect = (courseId: string) => {
+    // Find the course to check if it has a Firebase ID
+    const selectedCourse = courses.find(course => course.id === courseId);
+    if (selectedCourse) {
+      console.log("Selected course:", selectedCourse);
+      setSelectedCourseId(courseId);
+      setActiveTab("course-content");
+    }
   };
 
   const handleCoursesUpdate = (updatedCourses: Course[]) => {
@@ -164,6 +196,9 @@ const Dashboard = ({ userRole }: DashboardProps) => {
   };
 
   if (selectedCourseId) {
+    // Find the course to get the Firebase ID if available
+    const selectedCourse = courses.find(course => course.id === selectedCourseId);
+    
     return (
       <div className="min-h-screen bg-gray-50">
         <CourseContent 
@@ -195,7 +230,7 @@ const Dashboard = ({ userRole }: DashboardProps) => {
 
         {/* Navigation Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3 lg:w-auto lg:grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:grid-cols-4">
             <TabsTrigger value="courses" className="flex items-center gap-2">
               <BookOpen className="h-4 w-4" />
               {userRole === 'learner' ? 'Browse Courses' : 'Course Library'}
@@ -210,6 +245,12 @@ const Dashboard = ({ userRole }: DashboardProps) => {
               <TabsTrigger value="analytics" className="flex items-center gap-2">
                 <TrendingUp className="h-4 w-4" />
                 Analytics
+              </TabsTrigger>
+            )}
+            {userRole === 'admin' && (
+              <TabsTrigger value="debug" className="flex items-center gap-2">
+                <Database className="h-4 w-4" />
+                Firebase
               </TabsTrigger>
             )}
           </TabsList>
@@ -283,6 +324,46 @@ const Dashboard = ({ userRole }: DashboardProps) => {
                       ))}
                       {courses.length === 0 && (
                         <p className="text-sm text-gray-500">No courses available</p>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+          )}
+          
+          {/* Firebase Debug Tab (Admin only) */}
+          {userRole === 'admin' && (
+            <TabsContent value="debug">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <FirebaseDebugger />
+                </div>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Firebase Courses</CardTitle>
+                    <CardDescription>List of all courses in Firestore</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="max-h-80 overflow-y-auto border rounded-md p-3">
+                      {loading ? (
+                        <div className="flex items-center justify-center py-4">
+                          <Loader2 className="h-6 w-6 animate-spin" />
+                        </div>
+                      ) : courses.length > 0 ? (
+                        <ul className="space-y-2">
+                          {courses.map(course => (
+                            <li key={course.id} className="text-sm border-b pb-2">
+                              <div className="font-medium">{course.title}</div>
+                              <div className="text-xs text-gray-500 flex items-center justify-between">
+                                <span>Firebase ID: {course.firebaseId?.substring(0, 8)}...</span>
+                                <span>Content: {course.content?.length || 0} items</span>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-sm text-gray-500 text-center py-4">No courses found in Firestore</p>
                       )}
                     </div>
                   </CardContent>

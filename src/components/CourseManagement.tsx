@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,9 +9,12 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Plus, Edit, Trash2, Eye, BookOpen, Users, Star, Clock, Video, FileText, File, X } from "lucide-react";
-import { courses as initialCourses } from "@/data/courses";
+import { Plus, Edit, Trash2, Eye, BookOpen, Users, Star, Clock, Video, FileText, File, X, Save, Loader2, GripVertical, ArrowDown, ArrowUp } from "lucide-react";
+import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd';
 import { Course, CourseContent, Quiz, QuizQuestion } from "@/types";
+import { courseService } from "@/services/courseService";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 
 interface CourseManagementProps {
   userRole: 'learner' | 'educator' | 'admin';
@@ -19,13 +22,18 @@ interface CourseManagementProps {
 }
 
 const CourseManagement = ({ userRole, onCoursesUpdate }: CourseManagementProps) => {
-  const [courses, setCourses] = useState<Course[]>(initialCourses);
+  const { currentUser } = useAuth();
+  const [courses, setCourses] = useState<Course[]>([]);
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [isCreateCourseOpen, setIsCreateCourseOpen] = useState(false);
   const [isCreateQuizOpen, setIsCreateQuizOpen] = useState(false);
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
   const [editingQuiz, setEditingQuiz] = useState<Quiz | null>(null);
   const [selectedCourseForContent, setSelectedCourseForContent] = useState<Course | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [editingContent, setEditingContent] = useState<CourseContent | null>(null);
+  
   const [newContent, setNewContent] = useState<Partial<CourseContent>>({
     title: '',
     type: 'video',
@@ -50,93 +58,333 @@ const CourseManagement = ({ userRole, onCoursesUpdate }: CourseManagementProps) 
 
   const [newQuiz, setNewQuiz] = useState<Partial<Quiz>>({
     title: '',
-    courseId: 0,
+    courseId: '',
     questions: []
   });
 
-  const handleCreateCourse = () => {
-    if (newCourse.title && newCourse.description && newCourse.category) {
-      const course: Course = {
-        id: Date.now(),
-        title: newCourse.title,
-        description: newCourse.description,
-        category: newCourse.category,
-        level: newCourse.level as 'Beginner' | 'Intermediate' | 'Advanced',
-        duration: newCourse.duration || '0 hours',
-        students: 0,
-        rating: 0,
-        instructor: newCourse.instructor || 'Instructor',
-        thumbnail: newCourse.thumbnail || 'https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=400&h=250&fit=crop',
-        status: newCourse.status as 'draft' | 'published' | 'archived',
-        content: [],
-        quiz: {
-          id: Date.now() + 1,
-          title: `${newCourse.title} Quiz`,
-          questions: []
-        }
-      };
+  // Handle reordering of course content
+  const handleContentReorder = async (result: DropResult) => {
+    if (!result.destination || !selectedCourseForContent || !currentUser) return;
+    
+    const { source, destination } = result;
+    if (source.index === destination.index) return;
+    
+    // Create a new array with reordered items
+    const updatedContent = [...selectedCourseForContent.content];
+    const [removed] = updatedContent.splice(source.index, 1);
+    updatedContent.splice(destination.index, 0, removed);
+    
+    // Update state immediately for UI responsiveness
+    const updatedCourse = {
+      ...selectedCourseForContent,
+      content: updatedContent
+    };
+    
+    // Update in local state
+    setSelectedCourseForContent(updatedCourse);
+    
+    // Update the courses list
+    const newCourses = courses.map(course => 
+      (course.id === selectedCourseForContent.id || 
+        (selectedCourseForContent.firebaseId && course.firebaseId === selectedCourseForContent.firebaseId)) 
+        ? updatedCourse 
+        : course
+    );
+    setCourses(newCourses);
+    onCoursesUpdate(newCourses);
+    
+    try {
+      // Update in Firebase
+      const courseId = selectedCourseForContent.firebaseId || selectedCourseForContent.id.toString();
       
-      const updatedCourses = [...courses, course];
-      setCourses(updatedCourses);
-      onCoursesUpdate(updatedCourses);
-      setNewCourse({
-        title: '',
-        description: '',
-        category: '',
-        level: 'Beginner',
-        duration: '',
-        students: 0,
-        rating: 0,
-        instructor: '',
-        thumbnail: '',
-        status: 'draft',
-        content: []
-      });
-      setIsCreateCourseOpen(false);
+      // Use updateDoc to update the content array directly in Firestore
+      await courseService.updateCourseContentOrder(
+        courseId,
+        updatedContent,
+        currentUser.uid
+      );
+      
+      toast.success('Content order updated successfully');
+    } catch (error) {
+      console.error('Error updating content order:', error);
+      toast.error('Failed to update content order');
+      
+      // Revert to original order on error
+      setSelectedCourseForContent(selectedCourseForContent);
+    }
+  };
+  
+  // Function to manually move content item up or down (alternative to drag-drop)
+  const moveContentItem = async (index: number, direction: 'up' | 'down') => {
+    if (!selectedCourseForContent || !selectedCourseForContent.content) return;
+    
+    const newIndex = direction === 'up' ? index - 1 : index + 1;
+    
+    // Check if the move is valid
+    if (newIndex < 0 || newIndex >= selectedCourseForContent.content.length) {
+      return;
+    }
+    
+    // Create result object similar to react-beautiful-dnd
+    const result = {
+      source: { index },
+      destination: { index: newIndex }
+    };
+    
+    // Use the same function for consistency
+    handleContentReorder(result as DropResult);
+  };
+
+  // Load courses from Firebase on component mount
+  useEffect(() => {
+    const loadCourses = async () => {
+      if (!currentUser) return;
+      
+      setLoading(true);
+      try {
+        console.log("Loading courses for user:", currentUser.uid);
+        const firebaseCourses = await courseService.getCourses(userRole, currentUser.uid);
+        console.log("Loaded courses from Firebase:", firebaseCourses);
+        
+        // All courses are now directly from Firebase
+        setCourses(firebaseCourses);
+        onCoursesUpdate(firebaseCourses);
+        
+        // Extract quizzes from courses
+        const extractedQuizzes: Quiz[] = [];
+        firebaseCourses.forEach(course => {
+          if (course.quiz && course.quiz.id && course.quiz.title) {
+            // Add courseTitle to quiz for better display
+            const quizWithCourse = {
+              ...course.quiz,
+              courseId: course.firebaseId || course.id
+            };
+            extractedQuizzes.push(quizWithCourse);
+          }
+        });
+        
+        console.log("Extracted quizzes:", extractedQuizzes.length);
+        setQuizzes(extractedQuizzes);
+      } catch (error) {
+        console.error('Error loading courses:', error);
+        toast.error('Failed to load courses from database');
+        // Set to empty array instead of using initial courses
+        setCourses([]);
+        onCoursesUpdate([]);
+        setQuizzes([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadCourses();
+  }, [currentUser, userRole, onCoursesUpdate]);
+
+  const handleCreateCourse = async () => {
+    if (!currentUser) {
+      toast.error('You must be logged in to create courses');
+      return;
+    }
+
+    if (newCourse.title && newCourse.description && newCourse.category) {
+      setSaving(true);
+      try {
+        console.log("Creating new course in Firebase...", newCourse);
+        
+        const course: Omit<Course, 'id'> = {
+          title: newCourse.title,
+          description: newCourse.description,
+          category: newCourse.category,
+          level: newCourse.level as 'Beginner' | 'Intermediate' | 'Advanced',
+          duration: newCourse.duration || '0 hours',
+          students: 0,
+          rating: 0,
+          instructor: newCourse.instructor || currentUser.email || 'Instructor',
+          thumbnail: newCourse.thumbnail || 'https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=400&h=250&fit=crop',
+          status: newCourse.status as 'draft' | 'published' | 'archived',
+          content: [],
+          quiz: {
+            id: Date.now().toString(),
+            title: `${newCourse.title} Quiz`,
+            questions: []
+          }
+        };
+        
+        // Save to Firebase - now returns both firebaseId and numericId
+        const result = await courseService.createCourse(course, currentUser.uid);
+        console.log("Course created with Firebase ID:", result.firebaseId);
+        
+        // Create course object with the IDs from Firebase
+        const createdCourse: Course = {
+          ...course,
+          id: result.id, 
+          firebaseId: result.firebaseId
+        };
+        
+        console.log("Created course object:", createdCourse);
+        
+        const updatedCourses = [...courses, createdCourse];
+        setCourses(updatedCourses);
+        onCoursesUpdate(updatedCourses);
+        
+        setNewCourse({
+          title: '',
+          description: '',
+          category: '',
+          level: 'Beginner',
+          duration: '',
+          students: 0,
+          rating: 0,
+          instructor: '',
+          thumbnail: '',
+          status: 'draft',
+          content: []
+        });
+        setIsCreateCourseOpen(false);
+        toast.success('Course created and saved successfully!');
+      } catch (error) {
+        console.error('Error creating course:', error);
+        toast.error('Failed to save course to database');
+      } finally {
+        setSaving(false);
+      }
+    } else {
+      toast.error('Please fill in all required fields');
     }
   };
 
-  const handleUpdateCourse = () => {
-    if (editingCourse) {
+  const handleUpdateCourse = async () => {
+    if (!currentUser || !editingCourse) return;
+
+    setSaving(true);
+    try {
+      // Update in Firebase if it's a Firebase course
+      const courseId = editingCourse.firebaseId || editingCourse.id.toString();
+      console.log("Updating course with ID:", courseId);
+      await courseService.updateCourse(courseId, editingCourse, currentUser.uid);
+      
       const updatedCourses = courses.map(course =>
         course.id === editingCourse.id ? editingCourse : course
       );
       setCourses(updatedCourses);
       onCoursesUpdate(updatedCourses);
       setEditingCourse(null);
+      toast.success('Course updated successfully!');
+    } catch (error) {
+      console.error('Error updating course:', error);
+      toast.error('Failed to update course');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleDeleteCourse = (courseId: number) => {
-    const updatedCourses = courses.filter(course => course.id !== courseId);
-    setCourses(updatedCourses);
-    onCoursesUpdate(updatedCourses);
-    setQuizzes(quizzes.filter(quiz => quiz.courseId !== courseId));
+  const handleDeleteCourse = async (courseId: string) => {
+    if (!currentUser) return;
+
+    setSaving(true);
+    try {
+      // Get the course to check if it has a Firebase ID
+      const courseToDelete = courses.find(c => c.id === courseId);
+      if (courseToDelete) {
+        // Delete from Firebase if it has a Firebase ID
+        const firebaseId = courseToDelete.firebaseId || courseId.toString();
+        console.log("Deleting course with ID:", firebaseId);
+        await courseService.deleteCourse(firebaseId, currentUser.uid);
+      }
+      
+      const updatedCourses = courses.filter(course => course.id !== courseId);
+      setCourses(updatedCourses);
+      onCoursesUpdate(updatedCourses);
+      setQuizzes(quizzes.filter(quiz => quiz.courseId !== courseId));
+      toast.success('Course deleted successfully!');
+    } catch (error) {
+      console.error('Error deleting course:', error);
+      toast.error('Failed to delete course');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleAddContent = () => {
-    if (selectedCourseForContent && newContent.title && newContent.type) {
-      const content: CourseContent = {
-        id: Date.now(),
-        title: newContent.title,
-        type: newContent.type as 'video' | 'text' | 'pdf',
-        url: newContent.url,
-        content: newContent.content || '',
-        duration: newContent.duration || ''
-      };
+  const handleUpdateContent = async () => {
+    if (!currentUser || !selectedCourseForContent || !editingContent) {
+      toast.error('Cannot update content at this time');
+      return;
+    }
 
-      const updatedCourses = courses.map(course => {
-        if (course.id === selectedCourseForContent.id) {
-          return {
-            ...course,
-            content: [...(course.content || []), content]
-          };
+    setSaving(true);
+    try {
+      console.log("Updating content in course:", selectedCourseForContent);
+      console.log("Original editingContent:", editingContent);
+      console.log("Form newContent values:", newContent);
+
+      // Process video URLs for editing
+      // Use the values from newContent (form) but keep the ID from editingContent
+      let processedContent: CourseContent = { 
+        ...editingContent,
+        title: newContent.title || editingContent.title,
+        type: (newContent.type as 'video' | 'text' | 'pdf') || editingContent.type,
+        url: newContent.url || editingContent.url || '',
+        content: newContent.content || editingContent.content || '',
+        duration: newContent.duration || editingContent.duration || ''
+      };
+      
+      if (processedContent.type === 'video' && processedContent.url) {
+        try {
+          // Convert YouTube URLs to embed format
+          if (processedContent.url.includes('youtube.com/watch')) {
+            const videoId = new URL(processedContent.url).searchParams.get('v');
+            if (videoId) {
+              processedContent.videoUrl = `https://www.youtube.com/embed/${videoId}`;
+            }
+          } else if (processedContent.url.includes('youtu.be/')) {
+            const videoId = processedContent.url.split('youtu.be/')[1]?.split('?')[0];
+            if (videoId) {
+              processedContent.videoUrl = `https://www.youtube.com/embed/${videoId}`;
+            }
+          } else {
+            // If it's already an embed URL or other video URL, keep it as is
+            processedContent.videoUrl = processedContent.url;
+          }
+        } catch (e) {
+          console.error("Error processing video URL:", e);
+          processedContent.videoUrl = processedContent.url;
         }
-        return course;
-      });
+      }
+      
+      // Use Firebase ID if available, otherwise use numeric ID
+      const courseId = selectedCourseForContent.firebaseId || selectedCourseForContent.id.toString();
+      console.log("Updating content in course with ID:", courseId);
+      
+      // Update course content in Firebase
+      await courseService.updateCourseContent(
+        courseId,
+        processedContent,
+        currentUser.uid
+      );
+      
+      // Update the selected course with the updated content
+      const updatedCourse = {
+        ...selectedCourseForContent,
+        content: selectedCourseForContent.content.map(item => 
+          item.id === processedContent.id ? processedContent : item
+        )
+      };
+      
+      // Update the courses list
+      const updatedCourses = courses.map(course => 
+        (course.id === selectedCourseForContent.id || 
+         (selectedCourseForContent.firebaseId && 
+          course.firebaseId === selectedCourseForContent.firebaseId)) 
+          ? updatedCourse 
+          : course
+      );
 
       setCourses(updatedCourses);
       onCoursesUpdate(updatedCourses);
+      setSelectedCourseForContent(updatedCourse);
+      
+      // Reset editing state
+      setEditingContent(null);
       setNewContent({
         title: '',
         type: 'video',
@@ -144,36 +392,324 @@ const CourseManagement = ({ userRole, onCoursesUpdate }: CourseManagementProps) 
         content: '',
         duration: ''
       });
+      
+      toast.success('Content updated successfully!');
+    } catch (error) {
+      console.error('Error updating content:', error);
+      toast.error('Failed to update course content');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleCreateQuiz = () => {
-    if (newQuiz.title && newQuiz.courseId && newQuiz.questions && newQuiz.questions.length > 0) {
+  const handleDeleteContent = async (contentId: string) => {
+    if (!currentUser || !selectedCourseForContent) {
+      toast.error('Cannot delete content at this time');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      // Use Firebase ID if available, otherwise use numeric ID
+      const courseId = selectedCourseForContent.firebaseId || selectedCourseForContent.id.toString();
+      console.log("Deleting content from course with ID:", courseId);
+      
+      // Delete from Firebase
+      await courseService.deleteCourseContent(
+        courseId,
+        contentId,
+        currentUser.uid
+      );
+      
+      // Update local state
+      const updatedCourse = {
+        ...selectedCourseForContent,
+        content: selectedCourseForContent.content.filter(item => item.id !== contentId)
+      };
+      
+      // Update the courses list
+      const updatedCourses = courses.map(course => 
+        (course.id === selectedCourseForContent.id || 
+         (selectedCourseForContent.firebaseId && 
+          course.firebaseId === selectedCourseForContent.firebaseId)) 
+          ? updatedCourse 
+          : course
+      );
+
+      setCourses(updatedCourses);
+      onCoursesUpdate(updatedCourses);
+      setSelectedCourseForContent(updatedCourse);
+      toast.success('Content deleted successfully!');
+    } catch (error) {
+      console.error('Error deleting content:', error);
+      toast.error('Failed to delete course content');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleAddContent = async () => {
+    if (!currentUser || !selectedCourseForContent || !newContent.title || !newContent.type) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      console.log("Adding content to course:", selectedCourseForContent);
+      
+      // Process video URLs to make them embeddable
+      let processedContent: Omit<CourseContent, 'id'> = {
+        title: newContent.title,
+        type: newContent.type as 'video' | 'text' | 'pdf',
+        url: newContent.url || '',
+        content: newContent.content || '',
+        duration: newContent.duration || ''
+      };
+      
+      if (processedContent.type === 'video' && processedContent.url) {
+        try {
+          // Convert YouTube URLs to embed format
+          if (processedContent.url.includes('youtube.com/watch')) {
+            const videoId = new URL(processedContent.url).searchParams.get('v');
+            if (videoId) {
+              processedContent.videoUrl = `https://www.youtube.com/embed/${videoId}`;
+            }
+          } else if (processedContent.url.includes('youtu.be/')) {
+            const videoId = processedContent.url.split('youtu.be/')[1]?.split('?')[0];
+            if (videoId) {
+              processedContent.videoUrl = `https://www.youtube.com/embed/${videoId}`;
+            }
+          } else {
+            // If it's already an embed URL or other video URL, keep it as is
+            processedContent.videoUrl = processedContent.url;
+          }
+        } catch (e) {
+          console.error("Error processing video URL:", e);
+          processedContent.videoUrl = processedContent.url;
+        }
+      }
+      
+      // Use Firebase ID if available, otherwise use numeric ID
+      const courseId = selectedCourseForContent.firebaseId || selectedCourseForContent.id.toString();
+      console.log("Adding content to course with ID:", courseId);
+      
+      // The addCourseContent now returns the created content with an ID
+      const contentWithId = await courseService.addCourseContent(
+        courseId,
+        processedContent,
+        currentUser.uid
+      );
+      
+      console.log("Content added with ID:", contentWithId);
+      
+      // Update the selected course with the new content
+      const updatedCourse = {
+        ...selectedCourseForContent,
+        content: [...(selectedCourseForContent.content || []), contentWithId]
+      };
+      
+      // Update the courses list - match by ID or Firebase ID
+      const updatedCourses = courses.map(course => 
+        (course.id === selectedCourseForContent.id || 
+         (selectedCourseForContent.firebaseId && 
+          course.firebaseId === selectedCourseForContent.firebaseId)) 
+          ? updatedCourse 
+          : course
+      );
+
+      setCourses(updatedCourses);
+      onCoursesUpdate(updatedCourses);
+      setSelectedCourseForContent(updatedCourse);
+      
+      setNewContent({
+        title: '',
+        type: 'video',
+        url: '',
+        content: '',
+        duration: ''
+      });
+      
+      toast.success('Content added successfully!');
+    } catch (error) {
+      console.error('Error adding content:', error);
+      toast.error('Failed to add course content');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCreateQuiz = async () => {
+    if (!currentUser) {
+      toast.error('You must be logged in to manage quizzes');
+      return;
+    }
+    
+    if (!newQuiz.title) {
+      toast.error('Please enter a quiz title');
+      return;
+    }
+    
+    if (!newQuiz.courseId) {
+      toast.error('Please select a course for this quiz');
+      return;
+    }
+    
+    if (!newQuiz.questions || newQuiz.questions.length === 0) {
+      toast.error('Please add at least one question to the quiz');
+      return;
+    }
+    
+    for (const question of newQuiz.questions) {
+      if (!question.question) {
+        toast.error('All questions must have content');
+        return;
+      }
+      
+      if (question.options.some(option => !option)) {
+        toast.error('All options must be filled out');
+        return;
+      }
+    }
+
+    setSaving(true);
+    try {
+      // Create or update a quiz - always use a string ID
+      // Use a UUID-like format instead of timestamp for better uniqueness
+      const uniqueId = editingQuiz ? editingQuiz.id : 
+        'quiz_' + Date.now().toString() + '_' + Math.random().toString(36).substring(2, 9);
+        
       const quiz: Quiz = {
-        id: Date.now(),
+        id: uniqueId,
         title: newQuiz.title,
         courseId: newQuiz.courseId,
         questions: newQuiz.questions.map((q, index) => ({
-          id: index + 1,
+          id: 'q_' + (index + 1).toString(),
           question: q.question,
           options: q.options,
           correctAnswer: q.correctAnswer
         }))
       };
+
+      // Find the course by checking both firebaseId and id fields
+      const quizCourseId = newQuiz.courseId?.toString() || "";
+      console.log("Looking for course with ID:", quizCourseId);
       
-      setQuizzes([...quizzes, quiz]);
+      // Try to find by Firebase ID first, then by regular ID
+      let courseToUpdate = courses.find(c => 
+        c.firebaseId === quizCourseId || c.id === quizCourseId
+      );
+      
+      console.log("Course for quiz operation:", courseToUpdate);
+      
+      if (courseToUpdate) {
+        // Always prefer Firebase ID for Firestore operations
+        const courseId = courseToUpdate.firebaseId || courseToUpdate.id;
+        await courseService.updateCourseQuiz(
+          courseId,
+          quiz,
+          currentUser.uid
+        );
+
+        // Update local state
+        const updatedCourses = courses.map(course => 
+          (course.id === courseToUpdate?.id || 
+           (courseToUpdate?.firebaseId && course.firebaseId === courseToUpdate.firebaseId)) 
+            ? { ...course, quiz } 
+            : course
+        );
+        setCourses(updatedCourses);
+        onCoursesUpdate(updatedCourses);
+        
+        // Update the quizzes array
+        if (editingQuiz) {
+          setQuizzes(quizzes.map(q => q.id === quiz.id ? quiz : q));
+        } else {
+          setQuizzes([...quizzes, quiz]);
+        }
+      } else {
+        console.error("Course not found for quiz:", newQuiz.courseId);
+        toast.error("Course not found. Quiz not saved.");
+        setSaving(false);
+        return;
+      }
+      
+      // Reset state
       setNewQuiz({
         title: '',
-        courseId: 0,
+        courseId: '',
         questions: []
       });
       setIsCreateQuizOpen(false);
+      setEditingQuiz(null);
+      toast.success(editingQuiz ? 'Quiz updated successfully!' : 'Quiz created successfully!');
+    } catch (error) {
+      console.error('Error creating quiz:', error);
+      toast.error('Failed to save quiz');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteQuiz = async (quizId: string) => {
+    if (!currentUser) {
+      toast.error('You must be logged in to delete quizzes');
+      return;
+    }
+    
+    setSaving(true);
+    try {
+      // Find the course that contains this quiz
+      const courseWithQuiz = courses.find(course => course.quiz && course.quiz.id === quizId);
+      
+      if (!courseWithQuiz) {
+        toast.error("Course not found for this quiz");
+        return;
+      }
+      
+      // Always use Firebase ID for Firestore operations
+      const courseId = courseWithQuiz.firebaseId || courseWithQuiz.id.toString();
+      console.log(`Deleting quiz ${quizId} from course ${courseId}`);
+      
+      // Delete the quiz from Firebase
+      await courseService.deleteCourseQuiz(
+        courseId,
+        quizId,
+        currentUser.uid
+      );
+      
+      // Update local state
+      setQuizzes(quizzes.filter(quiz => quiz.id !== quizId));
+      
+      // Update the courses list
+      const updatedCourses = courses.map(course => {
+        if ((course.quiz && course.quiz.id === quizId)) {
+          // Create an empty quiz structure with a string ID format
+          const emptyQuiz = {
+            id: 'quiz_empty_' + Date.now().toString(),
+            title: `${course.title} Quiz`,
+            questions: []
+          };
+          return { ...course, quiz: emptyQuiz };
+        }
+        return course;
+      });
+      
+      setCourses(updatedCourses);
+      onCoursesUpdate(updatedCourses);
+      
+      toast.success('Quiz deleted successfully!');
+    } catch (error) {
+      console.error('Error deleting quiz:', error);
+      toast.error('Failed to delete quiz');
+    } finally {
+      setSaving(false);
     }
   };
 
   const addQuizQuestion = () => {
     const newQuestion: QuizQuestion = {
-      id: Date.now(), // Generate a temporary ID
+      id: 'q_' + Date.now().toString() + '_' + Math.random().toString(36).substring(2, 5), // Generate a unique string ID
       question: '',
       options: ['', '', '', ''],
       correctAnswer: 0
@@ -205,7 +741,11 @@ const CourseManagement = ({ userRole, onCoursesUpdate }: CourseManagementProps) 
         <div className="flex space-x-2">
           <Dialog open={isCreateCourseOpen} onOpenChange={setIsCreateCourseOpen}>
             <DialogTrigger asChild>
-              <Button className="bg-purple-600 hover:bg-purple-700">
+              <Button 
+                className="bg-purple-600 hover:bg-purple-700" 
+                data-voice="create-course"
+                disabled={saving}
+              >
                 <Plus className="h-4 w-4 mr-2" />
                 Create Course
               </Button>
@@ -305,8 +845,23 @@ const CourseManagement = ({ userRole, onCoursesUpdate }: CourseManagementProps) 
                 </div>
               </div>
               <DialogFooter>
-                <Button onClick={handleCreateCourse} className="bg-purple-600 hover:bg-purple-700">
-                  Create Course
+                <Button 
+                  onClick={handleCreateCourse} 
+                  className="bg-purple-600 hover:bg-purple-700"
+                  data-voice="save-course"
+                  disabled={saving}
+                >
+                  {saving ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4 mr-2" />
+                      Create Course
+                    </>
+                  )}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -314,16 +869,21 @@ const CourseManagement = ({ userRole, onCoursesUpdate }: CourseManagementProps) 
 
           <Dialog open={isCreateQuizOpen} onOpenChange={setIsCreateQuizOpen}>
             <DialogTrigger asChild>
-              <Button variant="outline">
+              <Button 
+                variant="outline"
+                data-voice="create-quiz"
+              >
                 <Plus className="h-4 w-4 mr-2" />
                 Create Quiz
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>Create New Quiz</DialogTitle>
+                <DialogTitle>{editingQuiz ? 'Edit Quiz' : 'Create New Quiz'}</DialogTitle>
                 <DialogDescription>
-                  Create a quiz for one of your courses.
+                  {editingQuiz 
+                    ? 'Edit the quiz for your course.' 
+                    : 'Create a quiz for one of your courses.'}
                 </DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 py-4">
@@ -338,16 +898,48 @@ const CourseManagement = ({ userRole, onCoursesUpdate }: CourseManagementProps) 
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="course-select">Select Course</Label>
-                  <Select value={newQuiz.courseId?.toString()} onValueChange={(value) => setNewQuiz({ ...newQuiz, courseId: parseInt(value) })}>
+                  <Select 
+                    value={newQuiz.courseId?.toString() || ""} 
+                    onValueChange={(value) => {
+                      console.log("Quiz: Course selected with value:", value);
+                      console.log("Available courses:", courses);
+                      
+                      // Find the course by Firestore ID first, then by internal ID
+                      let selectedCourse = courses.find(c => c.firebaseId === value || c.id === value);
+                      
+                      if (selectedCourse) {
+                        console.log("Quiz: Found course:", selectedCourse);
+                        // Always use the Firestore ID when available
+                        const courseIdToUse = selectedCourse.firebaseId || selectedCourse.id;
+                        console.log("Using Firestore ID for course:", courseIdToUse);
+                        setNewQuiz({ ...newQuiz, courseId: courseIdToUse });
+                      } else {
+                        console.warn("Quiz: Could not find course for value:", value);
+                        // Use the selected value as-is
+                        setNewQuiz({ ...newQuiz, courseId: value });
+                        toast.error("Course not found in local state, using selected ID");
+                      }
+                    }}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Choose a course" />
                     </SelectTrigger>
                     <SelectContent>
-                      {courses.map(course => (
-                        <SelectItem key={course.id} value={course.id.toString()}>
-                          {course.title}
-                        </SelectItem>
-                      ))}
+                      {courses.length > 0 ? (
+                        courses.map(course => (
+                          <SelectItem 
+                            key={course.id} 
+                            value={course.firebaseId || course.id}
+                            title={`Firestore ID: ${course.firebaseId || course.id}`}
+                          >
+                            {course.title}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <div className="px-2 py-4 text-center text-sm text-gray-500">
+                          No courses available. Please create a course first.
+                        </div>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -355,7 +947,12 @@ const CourseManagement = ({ userRole, onCoursesUpdate }: CourseManagementProps) 
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <Label>Questions</Label>
-                    <Button onClick={addQuizQuestion} size="sm" variant="outline">
+                    <Button 
+                      onClick={addQuizQuestion} 
+                      size="sm" 
+                      variant="outline"
+                      data-voice="add-question"
+                    >
                       <Plus className="h-4 w-4 mr-2" />
                       Add Question
                     </Button>
@@ -413,8 +1010,22 @@ const CourseManagement = ({ userRole, onCoursesUpdate }: CourseManagementProps) 
                 </div>
               </div>
               <DialogFooter>
-                <Button onClick={handleCreateQuiz} className="bg-purple-600 hover:bg-purple-700">
-                  Create Quiz
+                <Button 
+                  onClick={handleCreateQuiz} 
+                  className="bg-purple-600 hover:bg-purple-700"
+                  disabled={saving}
+                  data-voice="save-quiz"
+                >
+                  {saving ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      {editingQuiz ? 'Updating Quiz...' : 'Creating Quiz...'}
+                    </>
+                  ) : (
+                    <>
+                      {editingQuiz ? 'Update Quiz' : 'Create Quiz'}
+                    </>
+                  )}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -476,6 +1087,12 @@ const CourseManagement = ({ userRole, onCoursesUpdate }: CourseManagementProps) 
                     <Badge variant="outline">{course.category}</Badge>
                     <Badge variant="secondary">{course.level}</Badge>
                   </div>
+                  
+                  {course.firebaseId && (
+                    <div className="text-xs text-gray-500 mt-1 truncate" title={`Firebase ID: ${course.firebaseId}`}>
+                      ID: {course.firebaseId.substring(0, 10)}...
+                    </div>
+                  )}
 
                   <div className="flex space-x-2">
                     <Button
@@ -518,35 +1135,124 @@ const CourseManagement = ({ userRole, onCoursesUpdate }: CourseManagementProps) 
         </TabsContent>
 
         <TabsContent value="quizzes" className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {quizzes.map((quiz) => (
-              <Card key={quiz.id}>
-                <CardHeader>
-                  <CardTitle>{quiz.title}</CardTitle>
-                  <CardDescription>
-                    Course: {courses.find(c => c.id === quiz.courseId)?.title}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-600">
-                      {quiz.questions.length} questions
-                    </span>
-                    <div className="flex space-x-2">
-                      <Button size="sm" variant="outline">
-                        <Edit className="h-4 w-4 mr-1" />
-                        Edit
-                      </Button>
-                      <Button size="sm" variant="destructive">
-                        <Trash2 className="h-4 w-4 mr-1" />
-                        Delete
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold">Quizzes</h2>
+            <Button 
+              onClick={() => {
+                setEditingQuiz(null);
+                setNewQuiz({
+                  title: '',
+                  courseId: '',
+                  questions: []
+                });
+                setIsCreateQuizOpen(true);
+              }}
+              className="bg-purple-600 hover:bg-purple-700 text-white"
+              data-voice="create-quiz"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Create Quiz
+            </Button>
           </div>
+          {quizzes.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {quizzes.map((quiz) => {
+                const associatedCourse = courses.find(c => 
+                  c.id === quiz.courseId || c.firebaseId === quiz.courseId
+                );
+                return (
+                  <Card key={quiz.id} className="hover:shadow-md transition-shadow">
+                    <CardHeader>
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <CardTitle>{quiz.title}</CardTitle>
+                          <CardDescription>
+                            Course: {associatedCourse?.title || 'Unknown Course'}
+                          </CardDescription>
+                        </div>
+                        <Badge variant={quiz.questions.length > 0 ? "outline" : "destructive"}>
+                          {quiz.questions.length > 0 ? `${quiz.questions.length} questions` : 'No questions'}
+                        </Badge>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        {quiz.questions.length > 0 ? (
+                          <div className="text-sm text-muted-foreground">
+                            <p className="font-medium">Question preview:</p>
+                            <p className="truncate">{quiz.questions[0].question}</p>
+                            {quiz.questions.length > 1 && (
+                              <p className="text-xs text-gray-500">+ {quiz.questions.length - 1} more questions</p>
+                            )}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">No questions added yet.</p>
+                        )}
+                        <div className="flex justify-between items-center pt-2">
+                          <div className="text-xs text-gray-500">
+                            ID: {typeof quiz.id === 'string' ? quiz.id.substring(0, 8) + '...' : 'quiz_' + quiz.id}
+                          </div>
+                          <div className="flex space-x-2">
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              onClick={() => {
+                                setEditingQuiz(quiz);
+                                setNewQuiz({
+                                  title: quiz.title,
+                                  courseId: quiz.courseId,
+                                  questions: [...quiz.questions]
+                                });
+                                setIsCreateQuizOpen(true);
+                              }}
+                            >
+                              <Edit className="h-4 w-4 mr-1" />
+                              Edit
+                            </Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button size="sm" variant="destructive">
+                                  <Trash2 className="h-4 w-4 mr-1" />
+                                  Delete
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Delete Quiz</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Are you sure you want to delete this quiz? This action cannot be undone.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction 
+                                    onClick={() => handleDeleteQuiz(quiz.id)}
+                                    className="bg-red-600 hover:bg-red-700"
+                                  >
+                                    Delete
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-center p-8 bg-gray-50 rounded-lg border border-dashed">
+              <div className="flex flex-col items-center space-y-2">
+                <BookOpen className="h-12 w-12 text-gray-400" />
+                <h3 className="font-medium text-lg">No Quizzes Found</h3>
+                <p className="text-sm text-gray-500">
+                  You haven't created any quizzes yet. Click the "Create Quiz" button to get started.
+                </p>
+              </div>
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="content" className="space-y-4">
@@ -559,21 +1265,47 @@ const CourseManagement = ({ userRole, onCoursesUpdate }: CourseManagementProps) 
               <div className="grid gap-2">
                 <Label>Select Course</Label>
                 <Select 
-                  value={selectedCourseForContent?.id.toString()} 
+                  value={selectedCourseForContent?.firebaseId || selectedCourseForContent?.id.toString() || ""} 
                   onValueChange={(value) => {
-                    const course = courses.find(c => c.id === parseInt(value));
+                    console.log("Course selected:", value);
+                    // Try to find the course first by Firebase ID (string value)
+                    let course = courses.find(c => c.firebaseId === value);
+                    
+                    // If not found, try to parse as numeric ID
+                    if (!course) {
+                      // Use the value directly as a string ID
+                      course = courses.find(c => c.id === value);
+                    }
+                    
+                    console.log("Found course:", course);
                     setSelectedCourseForContent(course || null);
+                    // Reset the new content form
+                    setNewContent({
+                      title: '',
+                      type: 'video',
+                      url: '',
+                      content: '',
+                      duration: ''
+                    });
                   }}
                 >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Choose a course" />
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select a course" />
                   </SelectTrigger>
                   <SelectContent>
-                    {courses.map(course => (
-                      <SelectItem key={course.id} value={course.id.toString()}>
-                        {course.title}
-                      </SelectItem>
-                    ))}
+                    {courses.length === 0 ? (
+                      <SelectItem value="none" disabled>No courses available</SelectItem>
+                    ) : (
+                      courses.map((course) => (
+                        <SelectItem 
+                          key={course.id} 
+                          value={course.firebaseId || course.id.toString()}
+                          title={`Course ID: ${course.id}${course.firebaseId ? ', Firebase ID: ' + course.firebaseId : ''}`}
+                        >
+                          {course.title}
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -649,33 +1381,154 @@ const CourseManagement = ({ userRole, onCoursesUpdate }: CourseManagementProps) 
                     />
                   </div>
 
-                  <Button onClick={handleAddContent} className="bg-purple-600 hover:bg-purple-700">
-                    Add Content
+                  <Button 
+                    onClick={editingContent ? handleUpdateContent : handleAddContent} 
+                    className="bg-purple-600 hover:bg-purple-700"
+                    disabled={saving}
+                  >
+                    {saving ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        {editingContent ? 'Updating...' : 'Adding...'}
+                      </>
+                    ) : (
+                      <>
+                        {editingContent ? 'Update Content' : 'Add Content'}
+                      </>
+                    )}
                   </Button>
+                  {editingContent && (
+                    <Button 
+                      onClick={() => {
+                        // Reset editing state
+                        setEditingContent(null);
+                        setNewContent({
+                          title: '',
+                          type: 'video',
+                          url: '',
+                          content: '',
+                          duration: ''
+                        });
+                      }}
+                      variant="outline"
+                      className="mt-2"
+                    >
+                      Cancel Editing
+                    </Button>
+                  )}
                 </div>
               )}
 
               {selectedCourseForContent && selectedCourseForContent.content && selectedCourseForContent.content.length > 0 && (
                 <div className="border-t pt-4">
-                  <h4 className="font-medium mb-3">Current Content</h4>
-                  <div className="space-y-2">
-                    {selectedCourseForContent.content.map((item) => (
-                      <div key={item.id} className="flex items-center justify-between p-3 border rounded">
-                        <div className="flex items-center space-x-3">
-                          {item.type === 'video' && <Video className="h-4 w-4 text-red-500" />}
-                          {item.type === 'text' && <FileText className="h-4 w-4 text-blue-500" />}
-                          {item.type === 'pdf' && <File className="h-4 w-4 text-green-500" />}
-                          <div>
-                            <p className="font-medium">{item.title}</p>
-                            <p className="text-sm text-gray-500">{item.duration}</p>
-                          </div>
+                  <h4 className="font-medium mb-3 flex items-center gap-2">
+                    Current Content
+                    <Badge variant="outline" className="ml-2">Drag to reorder</Badge>
+                  </h4>
+                  
+                  <DragDropContext onDragEnd={handleContentReorder}>
+                    <Droppable droppableId="course-content">
+                      {(provided) => (
+                        <div 
+                          {...provided.droppableProps}
+                          ref={provided.innerRef}
+                          className="space-y-2"
+                        >
+                          {selectedCourseForContent.content.map((item, index) => (
+                            <Draggable 
+                              key={item.id.toString()} 
+                              draggableId={item.id.toString()} 
+                              index={index}
+                            >
+                              {(provided, snapshot) => (
+                                <div
+                                  ref={provided.innerRef}
+                                  {...provided.draggableProps}
+                                  className={`flex items-center justify-between p-3 border rounded ${
+                                    snapshot.isDragging ? "bg-purple-50 shadow-md" : ""
+                                  }`}
+                                >
+                                  <div className="flex items-center space-x-3">
+                                    <div 
+                                      {...provided.dragHandleProps}
+                                      className="cursor-move p-1 hover:bg-gray-100 rounded"
+                                      title="Drag to reorder"
+                                    >
+                                      <GripVertical className="h-4 w-4 text-gray-400" />
+                                    </div>
+                                    
+                                    <Badge className="w-6 h-6 flex items-center justify-center rounded-full">
+                                      {index + 1}
+                                    </Badge>
+                                    
+                                    {item.type === 'video' && <Video className="h-4 w-4 text-red-500" />}
+                                    {item.type === 'text' && <FileText className="h-4 w-4 text-blue-500" />}
+                                    {item.type === 'pdf' && <File className="h-4 w-4 text-green-500" />}
+                                    <div>
+                                      <p className="font-medium">{item.title}</p>
+                                      <p className="text-sm text-gray-500">{item.duration}</p>
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="flex space-x-1">
+                                    <Button 
+                                      size="sm" 
+                                      variant="ghost"
+                                      onClick={() => moveContentItem(index, 'up')}
+                                      disabled={index === 0}
+                                      className="p-1 h-8 w-8"
+                                      title="Move up"
+                                    >
+                                      <ArrowUp className="h-4 w-4" />
+                                    </Button>
+                                    
+                                    <Button 
+                                      size="sm" 
+                                      variant="ghost"
+                                      onClick={() => moveContentItem(index, 'down')}
+                                      disabled={index === selectedCourseForContent.content.length - 1}
+                                      className="p-1 h-8 w-8"
+                                      title="Move down"
+                                    >
+                                      <ArrowDown className="h-4 w-4" />
+                                    </Button>
+                                    
+                                    <Button 
+                                      size="sm" 
+                                      variant="outline"
+                                      onClick={() => {
+                                        // Set the content for editing
+                                        setEditingContent(item);
+                                        // Populate the form with content data
+                                        setNewContent({
+                                          title: item.title,
+                                          type: item.type,
+                                          url: item.url || '',
+                                          content: item.content || '',
+                                          duration: item.duration || ''
+                                        });
+                                      }}
+                                    >
+                                      <Edit className="h-4 w-4" />
+                                    </Button>
+                                    <Button 
+                                      size="sm" 
+                                      variant="destructive"
+                                      onClick={() => handleDeleteContent(item.id)}
+                                      disabled={saving}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              )}
+                            </Draggable>
+                          ))}
+                          {provided.placeholder}
                         </div>
-                        <Button size="sm" variant="destructive">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
+                      )}
+                    </Droppable>
+                  </DragDropContext>
                 </div>
               )}
             </CardContent>
