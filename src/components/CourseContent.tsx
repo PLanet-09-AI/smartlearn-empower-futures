@@ -1,3 +1,8 @@
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import remarkRehype from "remark-rehype";
+import rehypeHighlight from "rehype-highlight";
+import "highlight.js/styles/github.css";
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -456,8 +461,15 @@ const CourseContent = ({ courseId, onBack, userRole }: CourseContentProps) => {
                           </Button>
                         )}
                       </div>
-                      <div className="whitespace-pre-line text-gray-700 leading-relaxed">
-                        {currentContent?.content}
+                      <div className="prose max-w-none text-gray-700 leading-relaxed">
+                        {currentContent?.content && (
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm, remarkRehype]}
+                            rehypePlugins={[rehypeHighlight]}
+                          >
+                            {typeof currentContent.content === 'string' ? currentContent.content : String(currentContent.content)}
+                          </ReactMarkdown>
+                        )}
                       </div>
                     </div>
                   </div>

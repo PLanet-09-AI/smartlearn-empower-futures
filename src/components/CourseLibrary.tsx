@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -9,6 +8,21 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Video, FileText, BookOpen } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import removeMarkdown from "remove-markdown";
+function cleanPlainText(text: string): string {
+  // Remove markdown, then extra dashes, hashes, and blank lines
+  let cleaned = removeMarkdown(text);
+  cleaned = cleaned.replace(/^[\s\-#*_]+/gm, ""); // Remove leading -, #, *, _ and spaces
+  cleaned = cleaned.replace(/\n{2,}/g, "\n"); // Collapse multiple newlines
+  cleaned = cleaned.replace(/^\s+|\s+$/g, ""); // Trim
+  return cleaned;
+}
+import remarkGfm from "remark-gfm";
+import remarkRehype from "remark-rehype";
+import rehypeHighlight from "rehype-highlight";
+import "highlight.js/styles/github.css";
+// import removeMarkdown from "remove-markdown"; // Add this import at the top (install with `npm install remove-markdown`);
 
 interface Course {
   id: string;
@@ -35,6 +49,8 @@ const CourseLibrary = ({ userRole, onCourseSelect, courses }: CourseLibraryProps
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [selectedLevel, setSelectedLevel] = useState("All");
+  const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
+  const [selectedLessonIdx, setSelectedLessonIdx] = useState(0);
   
   const filteredCourses = courses.filter(course => {
     const matchesSearch = course.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -131,13 +147,84 @@ const CourseLibrary = ({ userRole, onCourseSelect, courses }: CourseLibraryProps
 
         {/* Course List */}
         <div className="md:col-span-3">
+          {/* Course Detail Preview Modal/Section */}
+          {selectedCourse && (
+            <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center">
+              <div className="bg-white rounded-lg shadow-lg max-w-5xl w-full max-h-[90vh] overflow-y-auto p-0 relative flex flex-col md:flex-row">
+                <button
+                  className="absolute top-2 right-2 text-gray-500 hover:text-purple-600 text-xl"
+                  onClick={() => {
+                    setSelectedCourse(null);
+                    setSelectedLessonIdx(0);
+                  }}
+                  aria-label="Close"
+                >
+                  ×
+                </button>
+                {/* Sidebar: List of lessons */}
+                <div className="w-full md:w-1/3 border-r p-6 bg-gray-50 min-w-[260px]">
+                  <h2 className="text-2xl font-bold mb-2 break-words">{selectedCourse.title}</h2>
+                  <div className="mb-4 text-gray-600 break-words">{selectedCourse.description}</div>
+                  <div className="mb-4 flex flex-wrap gap-2">
+                    <Badge>{selectedCourse.category}</Badge>
+                    <Badge variant="secondary">{selectedCourse.level}</Badge>
+                    <Badge variant="outline">{selectedCourse.duration}</Badge>
+                  </div>
+                  <div>
+                    <h4 className="font-semibold mb-2">Lessons</h4>
+                    <ul className="space-y-1">
+                      {selectedCourse.content?.filter((c: any) => c.type === "text" && c.content).map((item: any, idx: number) => (
+                        <li key={item.id || idx}>
+                          <button
+                            className={`w-full text-left px-2 py-1 rounded ${selectedLessonIdx === idx ? "bg-purple-100 font-bold" : "hover:bg-gray-100"}`}
+                            onClick={() => setSelectedLessonIdx(idx)}
+                          >
+                            <span className="break-words">{item.title}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+                {/* Main: Markdown Preview */}
+                <div className="flex-1 overflow-auto p-0 flex flex-col items-center bg-white">
+                  {selectedCourse.content &&
+                    selectedCourse.content
+                      .filter((c: any) => c.type === "text" && c.content)
+                      .map((item: any, idx: number) =>
+                        idx === selectedLessonIdx ? (
+                          <div key={item.id || idx} className="w-full flex justify-center">
+                            <div
+                              className="prose prose-lg max-w-3xl w-full border rounded-lg p-8 bg-white shadow"
+                              style={{
+                                wordBreak: "break-word",
+                                whiteSpace: "normal", // <-- fix: do NOT use pre-line, let markdown handle paragraphs
+                                fontSize: "1.1rem",
+                                lineHeight: "1.8",
+                                background: "#fff"
+                              }}
+                            >
+                              <div style={{whiteSpace: 'pre-line'}}>
+                                {cleanPlainText(typeof item.content === 'string' ? item.content : String(item.content))}
+                              </div>
+                            </div>
+                          </div>
+                        ) : null
+                      )}
+                </div>
+              </div>
+            </div>
+          )}
           <ScrollArea className="h-[650px] w-full rounded-md border">
             <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
               {filteredCourses.map((course) => (
                 <Card 
                   key={course.id} 
                   className="cursor-pointer transition-all duration-300 hover:shadow-lg hover:scale-[1.02] hover:border-purple-300" 
-                  onClick={() => onCourseSelect(course.id)}
+                  onClick={() => {
+                    setSelectedCourse(course);
+                    onCourseSelect(course.id);
+                  }}
                   title={course.firebaseId ? `Course ID: ${course.id}, Firebase ID: ${course.firebaseId}` : `Course ID: ${course.id}`}
                 >
                   <div className="relative overflow-hidden">
@@ -197,24 +284,7 @@ const CourseLibrary = ({ userRole, onCourseSelect, courses }: CourseLibraryProps
                       )}
                     </div>
 
-                    {/* Content Preview */}
-                    {course.content && course.content.length > 0 && (
-                      <div className="pt-2 border-t">
-                        <div className="text-xs text-gray-500 mb-1">Preview content:</div>
-                        <div className="flex flex-wrap gap-1">
-                          {course.content.slice(0, 3).map((item, index) => (
-                            <div key={index} className="flex items-center space-x-1 text-xs bg-gray-100 hover:bg-purple-50 px-2 py-1 rounded transition-colors">
-                              {item.type === 'video' && <Video className="h-3 w-3 text-red-500" />}
-                              {item.type === 'text' && <FileText className="h-3 w-3 text-blue-500" />}
-                              <span className="truncate max-w-[80px]">{item.title}</span>
-                            </div>
-                          ))}
-                          {course.content.length > 3 && (
-                            <span className="text-xs text-gray-400">+{course.content.length - 3} more</span>
-                          )}
-                        </div>
-                      </div>
-                    )}
+                    {/* Content Preview: removed, do not show any course content in the card */}
                     
                     {/* Firebase ID indicator for admin/educator */}
                     {userRole !== 'learner' && course.firebaseId && (
@@ -229,6 +299,7 @@ const CourseLibrary = ({ userRole, onCourseSelect, courses }: CourseLibraryProps
                         className="w-full bg-purple-600 hover:bg-purple-700 transform hover:scale-105 transition-all duration-200 shadow-md hover:shadow-lg"
                         onClick={(e) => {
                           e.stopPropagation();
+                          setSelectedCourse(course);
                           onCourseSelect(course.id);
                           console.log(`Selected course: ID=${course.id}, FirebaseID=${course.firebaseId || 'none'}`);
                         }}

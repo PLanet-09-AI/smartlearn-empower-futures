@@ -15,6 +15,11 @@ import { Course, CourseContent, Quiz, QuizQuestion } from "@/types";
 import { courseService } from "@/services/courseService";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import ReactMarkdown from "react-markdown";
+import rehypeHighlight from "rehype-highlight";
+import "highlight.js/styles/github.css"; // or any highlight.js theme you prefer
+import MdEditor from "react-markdown-editor-lite";
+import "react-markdown-editor-lite/lib/index.css";
 
 interface CourseManagementProps {
   userRole: 'educator' | 'admin';
@@ -732,6 +737,49 @@ const CourseManagement = ({ userRole, onCoursesUpdate }: CourseManagementProps) 
     setNewQuiz({ ...newQuiz, questions: updatedQuestions });
   };
 
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result as string;
+      setNewContent((prev) => ({
+        ...prev,
+        content: (prev.content || "") + `\n\n![Image](${base64})\n\n`
+      }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Add this helper before the return in your component
+  const insertAtCursor = (
+    textarea: HTMLTextAreaElement | null,
+    before: string,
+    after: string = "",
+    placeholder: string = ""
+  ) => {
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const value = textarea.value;
+    const selected = value.substring(start, end) || placeholder;
+    const newValue =
+      value.substring(0, start) +
+      before +
+      selected +
+      after +
+      value.substring(end);
+    textarea.value = newValue;
+    textarea.focus();
+    textarea.selectionStart = start + before.length;
+    textarea.selectionEnd = start + before.length + selected.length;
+    // Update state
+    setNewContent((prev) => ({
+      ...prev,
+      content: textarea.value,
+    }));
+  };
+
   return (
     <div className="container mx-auto py-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -805,7 +853,7 @@ const CourseManagement = ({ userRole, onCoursesUpdate }: CourseManagementProps) 
                     <Label htmlFor="edit-duration">Duration</Label>
                     <Input
                       id="edit-duration"
-                      value={editingCourse.duration}
+                      value={editingCourse?.duration}
                       onChange={(e) => setEditingCourse({ ...editingCourse, duration: e.target.value })}
                       placeholder="e.g., 2 hours, 5 days"
                     />
@@ -814,7 +862,7 @@ const CourseManagement = ({ userRole, onCoursesUpdate }: CourseManagementProps) 
                     <Label htmlFor="edit-instructor">Instructor</Label>
                     <Input
                       id="edit-instructor"
-                      value={editingCourse.instructor}
+                      value={editingCourse?.instructor}
                       onChange={(e) => setEditingCourse({ ...editingCourse, instructor: e.target.value })}
                       placeholder="Instructor name"
                     />
@@ -1350,12 +1398,46 @@ const CourseManagement = ({ userRole, onCoursesUpdate }: CourseManagementProps) 
 
                   {newContent.type === 'text' && (
                     <div className="grid gap-2">
-                      <Label>Text Content</Label>
-                      <Textarea
-                        value={newContent.content}
-                        onChange={(e) => setNewContent({ ...newContent, content: e.target.value })}
-                        placeholder="Enter your text content here..."
-                        rows={6}
+                      <Label>Text Content (Word-like Editor, Markdown Supported)</Label>
+                      <MdEditor
+                        value={newContent.content || ""}
+                        style={{ height: 400 }}
+                        renderHTML={text => (
+                          <div className="prose prose-lg max-w-none">
+                            <ReactMarkdown rehypePlugins={[rehypeHighlight]}>
+                              {text}
+                            </ReactMarkdown>
+                          </div>
+                        )}
+                        onChange={({ text }) => setNewContent({ ...newContent, content: text })}
+                        config={{
+                          view: {
+                            menu: true,
+                            md: true,
+                            html: true,
+                          },
+                          canView: {
+                            menu: true,
+                            md: true,
+                            html: true,
+                            fullScreen: true,
+                            hideMenu: true,
+                          },
+                        }}
+                        // Optional: handle image upload to base64
+                        onImageUpload={async (file) => {
+                          return new Promise((resolve, reject) => {
+                            const reader = new FileReader();
+                            reader.onload = () => {
+                              resolve(reader.result as string);
+                            };
+                            reader.onerror = () => {
+                              toast.error("Image upload failed");
+                              reject();
+                            };
+                            reader.readAsDataURL(file);
+                          });
+                        }}
                       />
                     </div>
                   )}
@@ -1532,6 +1614,24 @@ const CourseManagement = ({ userRole, onCoursesUpdate }: CourseManagementProps) 
               )}
             </CardContent>
           </Card>
+
+          {selectedCourseForContent && selectedCourseForContent.content && selectedCourseForContent.content.length > 0 && (
+            <div className="mt-8">
+              <h3 className="text-2xl font-bold mb-4">Course Content Preview</h3>
+              {selectedCourseForContent.content.map((item, idx) =>
+                item.type === "text" && item.content ? (
+                  <div key={item.id} className="mb-8">
+                    <h4 className="text-xl font-semibold mb-2">{item.title}</h4>
+                    <div className="prose prose-lg max-w-none border rounded p-4 bg-white shadow">
+                      <ReactMarkdown rehypePlugins={[rehypeHighlight]}>
+                        {item.content}
+                      </ReactMarkdown>
+                    </div>
+                  </div>
+                ) : null
+              )}
+            </div>
+          )}
         </TabsContent>
       </Tabs>
 
@@ -1594,7 +1694,7 @@ const CourseManagement = ({ userRole, onCoursesUpdate }: CourseManagementProps) 
                   <Label htmlFor="edit-duration">Duration</Label>
                   <Input
                     id="edit-duration"
-                    value={editingCourse.duration}
+                    value={editingCourse?.duration}
                     onChange={(e) => setEditingCourse({ ...editingCourse, duration: e.target.value })}
                   />
                 </div>
@@ -1602,7 +1702,7 @@ const CourseManagement = ({ userRole, onCoursesUpdate }: CourseManagementProps) 
                   <Label htmlFor="edit-instructor">Instructor</Label>
                   <Input
                     id="edit-instructor"
-                    value={editingCourse.instructor}
+                    value={editingCourse?.instructor}
                     onChange={(e) => setEditingCourse({ ...editingCourse, instructor: e.target.value })}
                   />
                 </div>
