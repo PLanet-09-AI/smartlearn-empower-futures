@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BookOpen, Users, TrendingUp, Clock, Play, Award, Settings, FileQuestion, BarChart3, Database, Loader2, UserCog } from "lucide-react";
+import UserProgressDashboard from "./UserProgressDashboard";
 
 // Function to sort courses by module number in title
 const sortCoursesByModuleNumber = (courses: any[]): any[] => {
@@ -280,11 +281,17 @@ const Dashboard = ({ userRole }: DashboardProps) => {
 
         {/* Navigation Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:grid-cols-5">
+          <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:grid-cols-6">
             <TabsTrigger value="courses" className="flex items-center gap-2">
               <BookOpen className="h-4 w-4" />
               {userRole === 'learner' ? 'Browse Courses' : 'Course Library'}
             </TabsTrigger>
+            {userRole === 'learner' && (
+              <TabsTrigger value="progress" className="flex items-center gap-2">
+                <BarChart3 className="h-4 w-4" />
+                My Progress
+              </TabsTrigger>
+            )}
             {(userRole === 'educator' || userRole === 'admin') && (
               <TabsTrigger value="management" className="flex items-center gap-2">
                 <Settings className="h-4 w-4" />
@@ -319,6 +326,13 @@ const Dashboard = ({ userRole }: DashboardProps) => {
               courses={courses}
             />
           </TabsContent>
+          
+          {/* Progress Tab (Learners only) */}
+          {userRole === 'learner' && (
+            <TabsContent value="progress">
+              <UserProgressDashboard />
+            </TabsContent>
+          )}
 
           {/* Course Management Tab (Educators and Admins only) */}
           {(userRole === 'educator' || userRole === 'admin') && (

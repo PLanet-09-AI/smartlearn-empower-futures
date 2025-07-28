@@ -13,6 +13,7 @@ import { speakText, stopSpeaking, isSpeechSupported } from "@/utils/textToSpeech
 import { Course } from "@/types";
 import { courseService } from "@/services/courseService";
 import { useAuth } from "@/contexts/AuthContext";
+import ContentCompletionTracker from "@/components/ContentCompletionTracker";
 
 interface CourseContentProps {
   courseId: string;
@@ -131,13 +132,21 @@ const CourseContent = ({ courseId, onBack, userRole }: CourseContentProps) => {
   };
 
   const markContentComplete = async () => {
-    if (currentContent && !completedContent.includes(currentContent.id)) {
+    if (currentContent && !completedContent.includes(currentContent.id) && currentUser) {
       const newCompletedContent = [...completedContent, currentContent.id];
       setCompletedContent(newCompletedContent);
       
-      // Update progress in user's profile if needed
-      // This could be implemented to save progress to Firebase
-      // Example: if (currentUser) { updateUserProgress(courseId, currentContent.id); }
+      // Save progress to Firebase
+      try {
+        await progressService.markContentComplete(
+          currentUser.uid,
+          course?.firebaseId || courseId,
+          currentContent.id.toString()
+        );
+        console.log("Progress saved to Firebase");
+      } catch (error) {
+        console.error("Error saving progress:", error);
+      }
     }
   };
 
@@ -477,6 +486,23 @@ const CourseContent = ({ courseId, onBack, userRole }: CourseContentProps) => {
               ) : (
                 <div className="text-center py-8">
                   <p>No content available</p>
+                </div>
+              )}
+              
+              {currentContent && (
+                <div className="mt-4 border-t pt-4">
+                  <ContentCompletionTracker 
+                    courseId={course?.firebaseId || courseId}
+                    contentId={currentContent.id.toString()}
+                    onCompletionChange={(completed) => {
+                      // Update local state when completion status changes
+                      if (completed && !completedContent.includes(currentContent.id)) {
+                        setCompletedContent([...completedContent, currentContent.id]);
+                      } else if (!completed && completedContent.includes(currentContent.id)) {
+                        setCompletedContent(completedContent.filter(id => id !== currentContent.id));
+                      }
+                    }}
+                  />
                 </div>
               )}
 

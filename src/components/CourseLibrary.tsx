@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,7 +7,10 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
-import { Video, FileText, BookOpen } from "lucide-react";
+import { Video, FileText, BookOpen, CheckCircle, Loader2 } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { enrollmentService } from "@/services/enrollmentService";
+import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 import removeMarkdown from "remove-markdown";
 function cleanPlainText(text: string): string {
@@ -46,11 +49,14 @@ interface CourseLibraryProps {
 }
 
 const CourseLibrary = ({ userRole, onCourseSelect, courses }: CourseLibraryProps) => {
+  const { currentUser } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [selectedLevel, setSelectedLevel] = useState("All");
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [selectedLessonIdx, setSelectedLessonIdx] = useState(0);
+  const [enrolledCourseIds, setEnrolledCourseIds] = useState<string[]>([]);
+  const [enrollingCourseId, setEnrollingCourseId] = useState<string | null>(null);
   
   const filteredCourses = courses.filter(course => {
     const matchesSearch = course.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -72,6 +78,61 @@ const CourseLibrary = ({ userRole, onCourseSelect, courses }: CourseLibraryProps
   // Get unique categories and levels from courses
   const categories = Array.from(new Set(courses.map(course => course.category)));
   const levels = Array.from(new Set(courses.map(course => course.level)));
+
+  // Load user enrollments when component mounts or user changes
+  useEffect(() => {
+    const loadUserEnrollments = async () => {
+      if (currentUser && userRole === 'learner') {
+        try {
+          const enrollments = await enrollmentService.getUserEnrollments(currentUser.uid);
+          // Extract course IDs from enrollments
+          const courseIds = enrollments.map(enrollment => enrollment.courseId);
+          setEnrolledCourseIds(courseIds);
+        } catch (error) {
+          console.error('Error loading user enrollments:', error);
+        }
+      }
+    };
+    
+    loadUserEnrollments();
+  }, [currentUser, userRole]);
+
+  // Handle enrollment in a course
+  const handleEnrollInCourse = async (e: React.MouseEvent, courseId: string) => {
+    e.stopPropagation(); // Prevent triggering the card click
+    
+    if (!currentUser) {
+      toast.error('Please sign in to enroll in courses');
+      return;
+    }
+    
+    if (enrolledCourseIds.includes(courseId)) {
+      // Already enrolled - navigate to course content
+      onCourseSelect(courseId);
+      return;
+    }
+    
+    try {
+      setEnrollingCourseId(courseId);
+      
+      // Enroll the user in the course
+      await enrollmentService.enrollUserInCourse(currentUser.uid, courseId);
+      
+      // Update local state
+      setEnrolledCourseIds([...enrolledCourseIds, courseId]);
+      
+      // Show success message
+      toast.success('Successfully enrolled in course!');
+      
+      // Redirect to course content
+      onCourseSelect(courseId);
+    } catch (error) {
+      console.error('Error enrolling in course:', error);
+      toast.error('Failed to enroll in course. Please try again.');
+    } finally {
+      setEnrollingCourseId(null);
+    }
+  };
 
   // Enhanced placeholder images from Unsplash
   const getCourseThumbnail = (course: Course) => {
@@ -332,16 +393,48 @@ const CourseLibrary = ({ userRole, onCourseSelect, courses }: CourseLibraryProps
                     {/* Enhanced Action Button */}
                     <div className="pt-2">
                       <Button 
-                        className="w-full bg-purple-600 hover:bg-purple-700 transform hover:scale-105 transition-all duration-200 shadow-md hover:shadow-lg"
+                        className={`w-full transform transition-all duration-200 shadow-md hover:shadow-lg ${
+                          userRole === 'learner' && enrolledCourseIds.includes(course.firebaseId || course.id)
+                            ? 'bg-green-600 hover:bg-green-700' 
+                            : 'bg-purple-600 hover:bg-purple-700'
+                        } hover:scale-105`}
                         onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedCourse(course);
-                          onCourseSelect(course.id);
-                          console.log(`Selected course: ID=${course.id}, FirebaseID=${course.firebaseId || 'none'}`);
+                          if (userRole === 'learner') {
+                            // For learners, handle enrollment
+                            handleEnrollInCourse(e, course.firebaseId || course.id);
+                          } else {
+                            // For educators/admins, just view the course
+                            e.stopPropagation();
+                            setSelectedCourse(course);
+                            onCourseSelect(course.id);
+                            console.log(`Selected course: ID=${course.id}, FirebaseID=${course.firebaseId || 'none'}`);
+                          }
                         }}
+                        disabled={enrollingCourseId === (course.firebaseId || course.id)}
                       >
-                        {userRole === 'learner' ? 'Enroll Now' : 'View Course'}
-                        <BookOpen className="ml-2 h-4 w-4" />
+                        {enrollingCourseId === (course.firebaseId || course.id) ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Enrolling...
+                          </>
+                        ) : userRole === 'learner' ? (
+                          enrolledCourseIds.includes(course.firebaseId || course.id) ? (
+                            <>
+                              Continue Learning
+                              <CheckCircle className="ml-2 h-4 w-4" />
+                            </>
+                          ) : (
+                            <>
+                              Enroll Now
+                              <BookOpen className="ml-2 h-4 w-4" />
+                            </>
+                          )
+                        ) : (
+                          <>
+                            View Course
+                            <BookOpen className="ml-2 h-4 w-4" />
+                          </>
+                        )}
                       </Button>
                     </div>
                   </CardContent>

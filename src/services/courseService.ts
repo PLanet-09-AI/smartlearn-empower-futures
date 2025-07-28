@@ -489,6 +489,38 @@ export class CourseService {
       throw new Error('Failed to delete course quiz');
     }
   }
+  
+  // Get enrolled courses for a user
+  async getEnrolledCourses(userId: string): Promise<Course[]> {
+    try {
+      // Query user enrollments collection
+      const enrollmentsRef = collection(db, "enrollments");
+      const q = query(enrollmentsRef, where("userId", "==", userId));
+      const querySnapshot = await getDocs(q);
+      
+      // Extract course IDs from enrollments
+      const courseIds = querySnapshot.docs.map(doc => doc.data().courseId);
+      
+      // Get course details for each enrollment
+      const coursesPromises = courseIds.map(async (courseId) => {
+        const courseDoc = await getDoc(doc(db, this.coursesCollection, courseId));
+        if (courseDoc.exists()) {
+          return {
+            ...courseDoc.data(),
+            id: courseDoc.id,
+            firebaseId: courseDoc.id
+          } as Course;
+        }
+        return null;
+      });
+      
+      const courses = await Promise.all(coursesPromises);
+      return courses.filter(course => course !== null) as Course[];
+    } catch (error) {
+      console.error("Error getting enrolled courses:", error);
+      throw error;
+    }
+  }
 }
 
 // Test Firebase connectivity and course operations
