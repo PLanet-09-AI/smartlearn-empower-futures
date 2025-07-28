@@ -130,7 +130,7 @@ export class CourseService {
           orderBy('createdAt', 'desc')
         );
       } else {
-        // Admins see all courses
+        // Admins see all courses (including unpublished)
         q = query(
           collection(db, this.coursesCollection),
           orderBy('createdAt', 'desc')

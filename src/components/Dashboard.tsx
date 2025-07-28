@@ -5,6 +5,28 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BookOpen, Users, TrendingUp, Clock, Play, Award, Settings, FileQuestion, BarChart3, Database, Loader2 } from "lucide-react";
+
+// Function to sort courses by module number in title
+const sortCoursesByModuleNumber = (courses: any[]): any[] => {
+  return [...courses].sort((a, b) => {
+    // Extract module numbers from titles
+    const getModuleNumber = (title: string) => {
+      const match = title.match(/module\s*(\d+)/i);
+      return match ? parseInt(match[1], 10) : Infinity;
+    };
+    
+    const moduleNumA = getModuleNumber(a.title);
+    const moduleNumB = getModuleNumber(b.title);
+    
+    // Sort by module number first
+    if (moduleNumA !== moduleNumB) {
+      return moduleNumA - moduleNumB;
+    }
+    
+    // If both have no module numbers or same module number, sort by creation date (newest first)
+    return new Date(b.createdAt?.seconds || 0).getTime() - new Date(a.createdAt?.seconds || 0).getTime();
+  });
+};
 import CourseLibrary from "./CourseLibrary";
 import CourseContent from "./CourseContent";
 import CourseManagement from "./CourseManagement";
@@ -49,7 +71,13 @@ const Dashboard = ({ userRole }: DashboardProps) => {
           return course;
         });
         
-        setCourses(validatedCourses);
+        // For admin users, sort courses by module number in title
+        let sortedCourses = validatedCourses;
+        if (userRole === 'admin') {
+          sortedCourses = sortCoursesByModuleNumber(validatedCourses);
+        }
+        
+        setCourses(sortedCourses);
       } catch (error) {
         console.error('Error loading courses:', error);
         setCourses([]);

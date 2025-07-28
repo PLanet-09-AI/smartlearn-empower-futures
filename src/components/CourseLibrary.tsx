@@ -61,6 +61,13 @@ const CourseLibrary = ({ userRole, onCourseSelect, courses }: CourseLibraryProps
     
     return matchesSearch && matchesCategory && matchesLevel;
   });
+  
+  // Preserve the original order of courses after filtering (important for admin's module ordering)
+  // We do this by mapping the original order indices and sorting by them
+  const preserveOrderedFilteredCourses = filteredCourses.map(course => {
+    const originalIndex = courses.findIndex(c => c.id === course.id);
+    return { ...course, originalIndex };
+  }).sort((a, b) => a.originalIndex - b.originalIndex);
 
   // Get unique categories and levels from courses
   const categories = Array.from(new Set(courses.map(course => course.category)));
@@ -90,7 +97,7 @@ const CourseLibrary = ({ userRole, onCourseSelect, courses }: CourseLibraryProps
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-bold">Course Library</h1>
         <div className="text-sm text-gray-600">
-          Showing {filteredCourses.length} of {courses.length} courses
+          Showing {preserveOrderedFilteredCourses.length} of {courses.length} courses
         </div>
       </div>
 
@@ -217,7 +224,7 @@ const CourseLibrary = ({ userRole, onCourseSelect, courses }: CourseLibraryProps
           )}
           <ScrollArea className="h-[650px] w-full rounded-md border">
             <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-              {filteredCourses.map((course) => (
+              {preserveOrderedFilteredCourses.map((course) => (
                 <Card 
                   key={course.id} 
                   className="cursor-pointer transition-all duration-300 hover:shadow-lg hover:scale-[1.02] hover:border-purple-300" 
@@ -240,7 +247,14 @@ const CourseLibrary = ({ userRole, onCourseSelect, courses }: CourseLibraryProps
                   </div>
                   
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-lg hover:text-purple-600 transition-colors">{course.title}</CardTitle>
+                    <CardTitle className="text-lg hover:text-purple-600 transition-colors">
+                      {userRole === 'admin' && course.title.match(/module\s*\d+/i) && (
+                        <span className="bg-purple-100 text-purple-700 text-xs px-2 py-1 rounded mr-2 font-bold">
+                          {course.title.match(/module\s*\d+/i)?.[0]}
+                        </span>
+                      )}
+                      {course.title}
+                    </CardTitle>
                     <div className="flex items-center space-x-2">
                       <Avatar className="h-6 w-6">
                         <AvatarImage src="" alt={course.instructor} />
