@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { BookOpen, Users, TrendingUp, Clock, Play, Award, Settings, FileQuestion, BarChart3, Database, Loader2 } from "lucide-react";
+import { BookOpen, Users, TrendingUp, Clock, Play, Award, Settings, FileQuestion, BarChart3, Database, Loader2, UserCog } from "lucide-react";
 
 // Function to sort courses by module number in title
 const sortCoursesByModuleNumber = (courses: any[]): any[] => {
@@ -54,6 +54,7 @@ import CourseContent from "./CourseContent";
 import CourseManagement from "./CourseManagement";
 import VoiceCommand from "./VoiceCommand";
 import FirebaseDebugger from "./FirebaseDebugger";
+import UserManagement from "./UserManagement";
 import { courseService } from "@/services/courseService";
 import { useAuth } from "@/contexts/AuthContext";
 import { Course } from "@/types";
@@ -279,7 +280,7 @@ const Dashboard = ({ userRole }: DashboardProps) => {
 
         {/* Navigation Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:grid-cols-5">
             <TabsTrigger value="courses" className="flex items-center gap-2">
               <BookOpen className="h-4 w-4" />
               {userRole === 'learner' ? 'Browse Courses' : 'Course Library'}
@@ -288,6 +289,12 @@ const Dashboard = ({ userRole }: DashboardProps) => {
               <TabsTrigger value="management" className="flex items-center gap-2">
                 <Settings className="h-4 w-4" />
                 Manage Courses
+              </TabsTrigger>
+            )}
+            {userRole === 'admin' && (
+              <TabsTrigger value="users" className="flex items-center gap-2">
+                <UserCog className="h-4 w-4" />
+                Users
               </TabsTrigger>
             )}
             {userRole === 'admin' && (
@@ -382,6 +389,13 @@ const Dashboard = ({ userRole }: DashboardProps) => {
             </TabsContent>
           )}
           
+          {/* Users Management Tab (Admin only) */}
+          {userRole === 'admin' && (
+            <TabsContent value="users">
+              <UserManagement />
+            </TabsContent>
+          )}
+
           {/* Firebase Debug Tab (Admin only) */}
           {userRole === 'admin' && (
             <TabsContent value="debug">
