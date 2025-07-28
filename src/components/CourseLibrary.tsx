@@ -248,11 +248,33 @@ const CourseLibrary = ({ userRole, onCourseSelect, courses }: CourseLibraryProps
                   
                   <CardHeader className="pb-2">
                     <CardTitle className="text-lg hover:text-purple-600 transition-colors">
-                      {userRole === 'admin' && course.title.match(/module\s*\d+/i) && (
-                        <span className="bg-purple-100 text-purple-700 text-xs px-2 py-1 rounded mr-2 font-bold">
-                          {course.title.match(/module\s*\d+/i)?.[0]}
-                        </span>
-                      )}
+                      {(() => {
+                        // Detect module numbering in various formats
+                        const moduleMatch = course.title.match(/module\s*(\d+)/i);
+                        const shortMatch = course.title.match(/\bm(\d+)\b/i);
+                        const numericPrefixMatch = course.title.match(/^(\d+)[\s.\-_)]+/);
+                        
+                        if (moduleMatch) {
+                          return (
+                            <span className="bg-purple-100 text-purple-700 text-xs px-2 py-1 rounded mr-2 font-bold">
+                              Module {moduleMatch[1]}
+                            </span>
+                          );
+                        } else if (shortMatch) {
+                          return (
+                            <span className="bg-purple-100 text-purple-700 text-xs px-2 py-1 rounded mr-2 font-bold">
+                              Module {shortMatch[1]}
+                            </span>
+                          );
+                        } else if (numericPrefixMatch) {
+                          return (
+                            <span className="bg-purple-100 text-purple-700 text-xs px-2 py-1 rounded mr-2 font-bold">
+                              #{numericPrefixMatch[1]}
+                            </span>
+                          );
+                        }
+                        return null;
+                      })()}
                       {course.title}
                     </CardTitle>
                     <div className="flex items-center space-x-2">

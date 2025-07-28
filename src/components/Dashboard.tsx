@@ -11,8 +11,25 @@ const sortCoursesByModuleNumber = (courses: any[]): any[] => {
   return [...courses].sort((a, b) => {
     // Extract module numbers from titles
     const getModuleNumber = (title: string) => {
-      const match = title.match(/module\s*(\d+)/i);
-      return match ? parseInt(match[1], 10) : Infinity;
+      // Look for "Module X" pattern (case insensitive, allowing spaces)
+      const moduleMatch = title.match(/module\s*(\d+)/i);
+      if (moduleMatch) {
+        return parseInt(moduleMatch[1], 10);
+      }
+      
+      // Also look for just "M1", "M2" patterns as alternatives
+      const shortMatch = title.match(/\bm(\d+)\b/i);
+      if (shortMatch) {
+        return parseInt(shortMatch[1], 10);
+      }
+      
+      // Also check for numeric prefixes like "1. Course Name", "2. Course Name"
+      const numericPrefixMatch = title.match(/^(\d+)[\s.\-_)]+/);
+      if (numericPrefixMatch) {
+        return parseInt(numericPrefixMatch[1], 10);
+      }
+      
+      return Infinity; // No module number found
     };
     
     const moduleNumA = getModuleNumber(a.title);
@@ -23,7 +40,12 @@ const sortCoursesByModuleNumber = (courses: any[]): any[] => {
       return moduleNumA - moduleNumB;
     }
     
-    // If both have no module numbers or same module number, sort by creation date (newest first)
+    // If both have no module numbers or same module number, sort by title alphabetically
+    if (moduleNumA === Infinity && moduleNumB === Infinity) {
+      return a.title.localeCompare(b.title);
+    }
+    
+    // If still tied, sort by creation date (newest first)
     return new Date(b.createdAt?.seconds || 0).getTime() - new Date(a.createdAt?.seconds || 0).getTime();
   });
 };
@@ -71,11 +93,9 @@ const Dashboard = ({ userRole }: DashboardProps) => {
           return course;
         });
         
-        // For admin users, sort courses by module number in title
-        let sortedCourses = validatedCourses;
-        if (userRole === 'admin') {
-          sortedCourses = sortCoursesByModuleNumber(validatedCourses);
-        }
+        // Apply module-based sorting for all user roles
+        // This ensures consistent course order across all user types
+        const sortedCourses = sortCoursesByModuleNumber(validatedCourses);
         
         setCourses(sortedCourses);
       } catch (error) {
