@@ -7,12 +7,14 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
-import { Video, FileText, BookOpen, CheckCircle, Loader2 } from "lucide-react";
+import { Video, FileText, BookOpen, CheckCircle, Award, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { enrollmentService } from "@/services/enrollmentService";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 import removeMarkdown from "remove-markdown";
+import { collection, query, where, getDocs } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 function cleanPlainText(text: string): string {
   // Remove markdown, then extra dashes, hashes, and blank lines
   let cleaned = removeMarkdown(text);
@@ -56,6 +58,7 @@ const CourseLibrary = ({ userRole, onCourseSelect, courses }: CourseLibraryProps
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [selectedLessonIdx, setSelectedLessonIdx] = useState(0);
   const [enrolledCourseIds, setEnrolledCourseIds] = useState<string[]>([]);
+  const [completedCourseIds, setCompletedCourseIds] = useState<string[]>([]);
   const [enrollingCourseId, setEnrollingCourseId] = useState<string | null>(null);
   
   const filteredCourses = courses.filter(course => {
@@ -79,22 +82,42 @@ const CourseLibrary = ({ userRole, onCourseSelect, courses }: CourseLibraryProps
   const categories = Array.from(new Set(courses.map(course => course.category)));
   const levels = Array.from(new Set(courses.map(course => course.level)));
 
-  // Load user enrollments when component mounts or user changes
+  // Load user enrollments and course progress when component mounts or user changes
   useEffect(() => {
-    const loadUserEnrollments = async () => {
+    const loadUserData = async () => {
       if (currentUser && userRole === 'learner') {
         try {
+          // Load enrollments
           const enrollments = await enrollmentService.getUserEnrollments(currentUser.uid);
-          // Extract course IDs from enrollments
           const courseIds = enrollments.map(enrollment => enrollment.courseId);
           setEnrolledCourseIds(courseIds);
+          
+          // Load course completion status
+          const progressQuery = query(
+            collection(db, "userProgress"),
+            where("userId", "==", currentUser.uid),
+            where("completionPercentage", "==", 100)
+          );
+          
+          const progressSnapshot = await getDocs(progressQuery);
+          const completedIds: string[] = [];
+          
+          progressSnapshot.forEach(doc => {
+            const data = doc.data();
+            if (data.courseId) {
+              completedIds.push(data.courseId);
+            }
+          });
+          
+          setCompletedCourseIds(completedIds);
+          console.log("Completed courses:", completedIds);
         } catch (error) {
-          console.error('Error loading user enrollments:', error);
+          console.error('Error loading user data:', error);
         }
       }
     };
     
-    loadUserEnrollments();
+    loadUserData();
   }, [currentUser, userRole]);
 
   // Handle enrollment in a course
@@ -106,6 +129,15 @@ const CourseLibrary = ({ userRole, onCourseSelect, courses }: CourseLibraryProps
       return;
     }
     
+    // Check if the course is completed
+    if (completedCourseIds.includes(courseId)) {
+      // Course is completed - show a message and navigate to course content
+      toast.success('You have already completed this course!');
+      onCourseSelect(courseId);
+      return;
+    }
+    
+    // Check if already enrolled
     if (enrolledCourseIds.includes(courseId)) {
       // Already enrolled - navigate to course content
       onCourseSelect(courseId);
@@ -394,9 +426,11 @@ const CourseLibrary = ({ userRole, onCourseSelect, courses }: CourseLibraryProps
                     <div className="pt-2">
                       <Button 
                         className={`w-full transform transition-all duration-200 shadow-md hover:shadow-lg ${
-                          userRole === 'learner' && enrolledCourseIds.includes(course.firebaseId || course.id)
-                            ? 'bg-green-600 hover:bg-green-700' 
-                            : 'bg-purple-600 hover:bg-purple-700'
+                          userRole === 'learner' && completedCourseIds.includes(course.firebaseId || course.id)
+                            ? 'bg-blue-600 hover:bg-blue-700'
+                            : userRole === 'learner' && enrolledCourseIds.includes(course.firebaseId || course.id)
+                              ? 'bg-green-600 hover:bg-green-700' 
+                              : 'bg-purple-600 hover:bg-purple-700'
                         } hover:scale-105`}
                         onClick={(e) => {
                           if (userRole === 'learner') {
@@ -418,7 +452,12 @@ const CourseLibrary = ({ userRole, onCourseSelect, courses }: CourseLibraryProps
                             Enrolling...
                           </>
                         ) : userRole === 'learner' ? (
-                          enrolledCourseIds.includes(course.firebaseId || course.id) ? (
+                          completedCourseIds.includes(course.firebaseId || course.id) ? (
+                            <>
+                              Completed
+                              <Award className="ml-2 h-4 w-4" />
+                            </>
+                          ) : enrolledCourseIds.includes(course.firebaseId || course.id) ? (
                             <>
                               Continue Learning
                               <CheckCircle className="ml-2 h-4 w-4" />

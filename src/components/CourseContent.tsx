@@ -1,9 +1,9 @@
+import React, { useState, useEffect, lazy, Suspense } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkRehype from "remark-rehype";
 import rehypeHighlight from "rehype-highlight";
 import "highlight.js/styles/github.css";
-import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,7 @@ import { speakText, stopSpeaking, isSpeechSupported } from "@/utils/textToSpeech
 import { Course } from "@/types";
 import { courseService } from "@/services/courseService";
 import { useAuth } from "@/contexts/AuthContext";
+import { progressService } from "@/services/progressService";
 import ContentCompletionTracker from "@/components/ContentCompletionTracker";
 
 interface CourseContentProps {
@@ -178,6 +179,44 @@ const CourseContent = ({ courseId, onBack, userRole }: CourseContentProps) => {
     setQuizAnswers(newAnswers);
   };
 
+  const handleEnrollInCourse = (courseId: string) => {
+    // Navigate to the enrolled course
+    onBack(); // First go back to courses
+    // After a brief delay, navigate to the new course
+    setTimeout(() => {
+      if (course) {
+        window.dispatchEvent(new CustomEvent('course-selected', { detail: courseId }));
+      }
+    }, 100);
+  };
+
+  // For learners, we'll use the completion screen instead of quizzes
+  if (showQuiz && userRole === 'learner') {
+    // Make sure the course is marked as complete in user progress
+    if (currentUser && course && course.content && completedContent.length === course.content.length) {
+      // Ensure the course is marked as fully completed in the database
+      // This is handled in the CourseCompletionScreen component
+    }
+    
+    // Import and render the course completion screen
+    const CourseCompletionScreen = lazy(() => import('./CourseCompletionScreen'));
+    
+    return (
+      <Suspense fallback={
+        <div className="flex justify-center items-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+        </div>
+      }>
+        <CourseCompletionScreen 
+          course={course}
+          onBack={onBack}
+          onEnrollInCourse={handleEnrollInCourse}
+        />
+      </Suspense>
+    );
+  }
+  
+  // For admin and educators, we'll still show the quiz functionality
   const submitQuiz = async () => {
     if (!course?.quiz || !course.quiz.questions) return;
     
@@ -208,7 +247,7 @@ const CourseContent = ({ courseId, onBack, userRole }: CourseContentProps) => {
     quizAnswers.length === course.quiz.questions.length && 
     quizAnswers.every(answer => answer !== undefined);
 
-  if (showQuiz) {
+  if (showQuiz && userRole !== 'learner') {
     return (
       <div className="max-w-4xl mx-auto p-6">
         <div className="flex items-center justify-between mb-6">
@@ -380,7 +419,7 @@ const CourseContent = ({ courseId, onBack, userRole }: CourseContentProps) => {
               
               <button
                 className={`flex items-center w-full text-left space-x-2 p-2 rounded text-sm ${
-                  showQuiz ? 'bg-yellow-100 text-yellow-700' : 'hover:bg-gray-50'
+                  showQuiz ? 'bg-green-100 text-green-700' : 'hover:bg-gray-50'
                 } ${completedContent.length < (course?.content?.length || 0) ? 'opacity-50 cursor-not-allowed' : ''}`}
                 onClick={() => {
                   if (course?.content && completedContent.length === course.content.length) {
@@ -389,12 +428,12 @@ const CourseContent = ({ courseId, onBack, userRole }: CourseContentProps) => {
                 }}
                 disabled={course?.content ? completedContent.length < course.content.length : true}
                 aria-label={course?.content && completedContent.length < course.content.length ? 
-                  "Complete all content before taking the quiz" : "Take final quiz"}
+                  "Complete all sections before finishing the course" : "Complete Course"}
                 title={course?.content && completedContent.length < course.content.length ? 
-                  "Complete all content before taking the quiz" : "Take final quiz"}
+                  "Complete all sections before finishing the course" : "Complete Course"}
               >
                 <Award className="h-4 w-4" />
-                <span>Final Quiz</span>
+                <span>{userRole === 'learner' ? 'Complete Course' : 'Final Quiz'}</span>
                 {quizCompleted && (
                   <CheckCircle className="h-4 w-4 text-green-600" />
                 )}
@@ -529,7 +568,9 @@ const CourseContent = ({ courseId, onBack, userRole }: CourseContentProps) => {
                     !completedContent.includes(currentContent.id))
                   }
                 >
-                  {course.content && currentContentIndex === course.content.length - 1 ? 'Take Quiz' : 'Next'}
+                  {course.content && currentContentIndex === course.content.length - 1 
+                    ? (userRole === 'learner' ? 'Complete Course' : 'Take Quiz') 
+                    : 'Next'}
                 </Button>
               </div>
             </CardContent>

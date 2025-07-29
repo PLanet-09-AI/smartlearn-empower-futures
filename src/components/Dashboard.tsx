@@ -56,6 +56,7 @@ import CourseManagement from "./CourseManagement";
 import VoiceCommand from "./VoiceCommand";
 import FirebaseDebugger from "./FirebaseDebugger";
 import UserManagement from "./UserManagement";
+import AnalyticsDashboard from "./AnalyticsDashboard";
 import { courseService } from "@/services/courseService";
 import { useAuth } from "@/contexts/AuthContext";
 import { Course } from "@/types";
@@ -111,7 +112,7 @@ const Dashboard = ({ userRole }: DashboardProps) => {
     loadCourses();
   }, [currentUser, userRole]);
 
-  // Voice command event listeners
+  // Voice command and course selection event listeners
   useEffect(() => {
     const handleVoiceNavigate = (event: CustomEvent) => {
       const tab = event.detail;
@@ -159,13 +160,23 @@ const Dashboard = ({ userRole }: DashboardProps) => {
         if (publishButton) publishButton.click();
       }
     };
+    
+    // Handle course selection from completion screen
+    const handleCourseSelected = (event: CustomEvent) => {
+      const courseId = event.detail;
+      if (courseId) {
+        handleCourseSelect(courseId);
+      }
+    };
 
     window.addEventListener('voice-navigate', handleVoiceNavigate as EventListener);
     window.addEventListener('voice-click', handleVoiceClick as EventListener);
+    window.addEventListener('course-selected', handleCourseSelected as EventListener);
 
     return () => {
       window.removeEventListener('voice-navigate', handleVoiceNavigate as EventListener);
       window.removeEventListener('voice-click', handleVoiceClick as EventListener);
+      window.removeEventListener('course-selected', handleCourseSelected as EventListener);
     };
   }, [userRole]);
 
@@ -348,58 +359,7 @@ const Dashboard = ({ userRole }: DashboardProps) => {
           {/* Analytics Tab (Admin only) */}
           {userRole === 'admin' && (
             <TabsContent value="analytics">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Platform Overview</CardTitle>
-                    <CardDescription>Key metrics and performance indicators</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="flex justify-between items-center">
-                      <span>Total Students</span>
-                      <span className="font-semibold">{getTotalStudents()}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span>Active Courses</span>
-                      <span className="font-semibold">{getCoursesCreated()}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span>Average Rating</span>
-                      <span className="font-semibold">{getAverageRating()}/5</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span>Popular Courses</span>
-                      <span className="font-semibold">{courses.filter(c => c.students > 50).length}</span>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Course Performance</CardTitle>
-                    <CardDescription>Enrollment trends by course</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      {courses.slice(0, 3).map((course, index) => (
-                        <div key={course.id}>
-                          <div className="flex justify-between">
-                            <span className="text-sm truncate">{course.title}</span>
-                            <span className="text-sm font-medium">{course.students} students</span>
-                          </div>
-                          <Progress 
-                            value={(course.students / Math.max(...courses.map(c => c.students), 1)) * 100} 
-                            className="h-2"
-                          />
-                        </div>
-                      ))}
-                      {courses.length === 0 && (
-                        <p className="text-sm text-gray-500">No courses available</p>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
+              <AnalyticsDashboard />
             </TabsContent>
           )}
           
