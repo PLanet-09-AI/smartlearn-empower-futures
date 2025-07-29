@@ -246,9 +246,13 @@ const Dashboard = ({ userRole }: DashboardProps) => {
   };
 
   const getUserName = () => {
+    if (currentUser?.email) {
+      return currentUser.email;
+    }
+    
     if (userRole === 'admin') return 'Admin User';
     if (userRole === 'educator') return 'Dr. Sarah Johnson';
-    return 'John Doe';
+    return 'Student';
   };
 
   const getUserWelcomeMessage = () => {

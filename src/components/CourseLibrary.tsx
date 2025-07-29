@@ -7,7 +7,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
-import { Video, FileText, BookOpen, CheckCircle, Award, Loader2 } from "lucide-react";
+import { Video, FileText, BookOpen, CheckCircle, Award, Loader2, Star } from "lucide-react";
+import { StarRating } from "@/components/ui/star-rating";
 import { useAuth } from "@/contexts/AuthContext";
 import { enrollmentService } from "@/services/enrollmentService";
 import { toast } from "sonner";
@@ -429,9 +430,14 @@ const CourseLibrary = ({ userRole, onCourseSelect, courses }: CourseLibraryProps
                     
                     <div className="flex items-center justify-between text-sm">
                       <div className="flex items-center space-x-4">
-                        <div className="flex items-center space-x-1 text-yellow-500">
-                          <span>⭐</span>
-                          <span className="text-gray-700">{course.rating || 'New'}</span>
+                        <div className="flex items-center space-x-1">
+                          <StarRating
+                            totalStars={5}
+                            initialRating={course.rating || 0}
+                            readonly={true}
+                            size="sm"
+                          />
+                          <span className="text-gray-700 ml-1">{course.rating ? course.rating.toFixed(1) : 'New'}</span>
                         </div>
                         <div className="flex items-center space-x-1 text-blue-500">
                           <span>👥</span>

@@ -8,6 +8,7 @@ export interface Course {
   level: 'Beginner' | 'Intermediate' | 'Advanced';
   duration: string;
   rating: number;
+  ratingCount?: number; // Number of ratings received
   students: number;
   instructor: string;
   thumbnail: string;
@@ -38,4 +39,13 @@ export interface QuizQuestion {
   question: string;
   options: string[];
   correctAnswer: number;
+}
+
+export interface CourseRating {
+  id?: string;
+  userId: string;
+  courseId: string;
+  rating: number;
+  comment?: string;
+  createdAt?: any;
 }

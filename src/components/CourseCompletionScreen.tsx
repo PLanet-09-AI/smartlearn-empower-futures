@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle, ChevronRight, ArrowRight, Loader2 } from 'lucide-react';
+import { CheckCircle, ChevronRight, ArrowRight, Loader2, Star } from 'lucide-react';
 import { Course } from '@/types';
 import { courseService } from '@/services/courseService';
 import { enrollmentService } from '@/services/enrollmentService';
@@ -10,6 +10,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import CourseRatingModal from './CourseRatingModal';
+import { StarRating } from '@/components/ui/star-rating';
 
 interface CourseCompletionScreenProps {
   course: Course;
@@ -27,6 +29,7 @@ const CourseCompletionScreen: React.FC<CourseCompletionScreenProps> = ({
   const [loading, setLoading] = useState(false);
   const [enrolling, setEnrolling] = useState(false);
   const [enrollingCourseId, setEnrollingCourseId] = useState<string | null>(null);
+  const [ratingModalOpen, setRatingModalOpen] = useState(true);
   
   // Mark course as complete when the component loads
   useEffect(() => {
@@ -147,6 +150,13 @@ const CourseCompletionScreen: React.FC<CourseCompletionScreenProps> = ({
 
   return (
     <div className="max-w-4xl mx-auto p-6">
+      <CourseRatingModal
+        isOpen={ratingModalOpen}
+        setIsOpen={setRatingModalOpen}
+        courseId={course.firebaseId || course.id}
+        courseTitle={course.title}
+      />
+      
       <Card className="border-green-200 bg-green-50">
         <CardHeader className="border-b border-green-200 bg-green-100">
           <div className="flex items-center space-x-2">
@@ -160,11 +170,24 @@ const CourseCompletionScreen: React.FC<CourseCompletionScreenProps> = ({
         <CardContent className="pt-6">
           <div className="text-center mb-8">
             <div className="text-4xl mb-4">🎉</div>
-            <h2 className="text-2xl font-bold mb-2">Thank You for Completing This Course</h2>
+            <h2 className="text-2xl font-bold mb-2">
+              {currentUser?.email ? `Thank You, ${currentUser.email}!` : 'Thank You'} for Completing This Course
+            </h2>
             <p className="text-gray-600 max-w-md mx-auto">
               You've successfully completed all sections of this course. 
               Your progress has been saved and is reflected on your profile.
             </p>
+            
+            <div className="mt-6">
+              <Button 
+                onClick={() => setRatingModalOpen(true)}
+                variant="outline" 
+                className="flex items-center gap-2"
+              >
+                <Star className="h-4 w-4 text-yellow-400 fill-yellow-400" />
+                Rate This Course
+              </Button>
+            </div>
           </div>
 
           {nextCourses.length > 0 ? (
