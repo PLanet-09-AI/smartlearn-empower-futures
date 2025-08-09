@@ -39,6 +39,7 @@ export interface QuizQuestion {
   question: string;
   options: string[];
   correctAnswer: number;
+  explanation?: string; // Added to provide explanations for answers
 }
 
 export interface CourseRating {
@@ -48,4 +49,55 @@ export interface CourseRating {
   rating: number;
   comment?: string;
   createdAt?: any;
+}
+
+// New interfaces for the AI Quiz System
+
+export interface QuizResult {
+  id: string;
+  userId: string;
+  courseId: string;
+  scenarioText: string;
+  questionsJson: string;
+  score: number;
+  generatedAt: Date | any; // Firebase Timestamp or JS Date
+  attemptedAt: Date | any | null; // Firebase Timestamp or JS Date
+  isCompleted: boolean;
+}
+
+export interface QuizAnswer {
+  id?: string;
+  quizResultId: string;
+  userId: string;
+  questionId: string;
+  selectedOptionId: number;
+  isCorrect: boolean;
+  submittedAt: Date | any; // Firebase Timestamp or JS Date
+}
+
+export interface LeaderboardEntry {
+  id: string;
+  userId: string;
+  userName: string;
+  courseId: string;
+  courseName: string;
+  score: number;
+  timeTaken: number; // milliseconds
+  attemptedAt: Date;
+}
+
+export interface QuizSubmission {
+  questions: {
+    questionId: string;
+    selectedOptionId: number;
+  }[];
+}
+
+export interface QuizResultViewModel {
+  score: number;
+  selectedAnswers: Record<string, boolean>;
+  explanations: Record<string, string>;
+  correctAnswers: Record<string, string>;
+  userAnswers: Record<string, string>;
+  attemptedAt: Date;
 }

@@ -8,13 +8,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, Play, FileText, CheckCircle, Clock, Award, Volume2, VolumeX, Loader2 } from "lucide-react";
+import { ArrowLeft, Play, FileText, CheckCircle, Clock, Award, Volume2, VolumeX, Loader2, Sparkles } from "lucide-react";
 import { speakText, stopSpeaking, isSpeechSupported } from "@/utils/textToSpeech";
 import { Course } from "@/types";
 import { courseService } from "@/services/courseService";
 import { useAuth } from "@/contexts/AuthContext";
 import { progressService } from "@/services/progressService";
 import ContentCompletionTracker from "@/components/ContentCompletionTracker";
+import CourseQuizSelector from "@/components/CourseQuizSelector";
 
 interface CourseContentProps {
   courseId: string;
@@ -190,185 +191,20 @@ const CourseContent = ({ courseId, onBack, userRole }: CourseContentProps) => {
     }, 100);
   };
 
-  // For learners, we'll use the completion screen instead of quizzes
-  if (showQuiz && userRole === 'learner') {
-    // Make sure the course is marked as complete in user progress
+  // Display our new AI-powered Quiz Selector for all user types
+  if (showQuiz) {
     if (currentUser && course && course.content && completedContent.length === course.content.length) {
       // Ensure the course is marked as fully completed in the database
-      // This is handled in the CourseCompletionScreen component
+      // This is handled in the CourseCompletionScreen component or quizService
     }
     
-    // Import and render the course completion screen
-    const CourseCompletionScreen = lazy(() => import('./CourseCompletionScreen'));
-    
+    // Use our new CourseQuizSelector component
     return (
-      <Suspense fallback={
-        <div className="flex justify-center items-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-        </div>
-      }>
-        <CourseCompletionScreen 
-          course={course}
-          onBack={onBack}
-          onEnrollInCourse={handleEnrollInCourse}
-        />
-      </Suspense>
-    );
-  }
-  
-  // For admin and educators, we'll still show the quiz functionality
-  const submitQuiz = async () => {
-    if (!course?.quiz || !course.quiz.questions) return;
-    
-    let correct = 0;
-    course.quiz.questions.forEach((question, index: number) => {
-      if (quizAnswers[index] === question.correctAnswer) {
-        correct++;
-      }
-    });
-    
-    const score = Math.round((correct / course.quiz.questions.length) * 100);
-    setQuizScore(score);
-    setQuizCompleted(true);
-    
-    // Save quiz results to Firebase if the user is authenticated
-    if (currentUser) {
-      try {
-        // Example implementation - you would need to create this method in your service
-        // await courseService.saveQuizResult(course.id.toString(), currentUser.uid, score);
-        console.log('Quiz completed with score:', score);
-      } catch (error) {
-        console.error('Error saving quiz results:', error);
-      }
-    }
-  };
-
-  const canSubmitQuiz = course?.quiz && course.quiz.questions && 
-    quizAnswers.length === course.quiz.questions.length && 
-    quizAnswers.every(answer => answer !== undefined);
-
-  if (showQuiz && userRole !== 'learner') {
-    return (
-      <div className="max-w-4xl mx-auto p-6">
-        <div className="flex items-center justify-between mb-6">
-          <Button variant="outline" onClick={() => setShowQuiz(false)}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Content
-          </Button>
-          <Badge variant="secondary">Quiz</Badge>
-        </div>
-
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center">
-                <Award className="h-5 w-5 mr-2 text-yellow-500" />
-                {course.quiz.title}
-              </CardTitle>
-              {speechSupported && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleSpeak(`Quiz: ${course.quiz.title}. Test your knowledge of the course material.`)}
-                >
-                  {isSpeaking ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-                </Button>
-              )}
-            </div>
-            <CardDescription>
-              Test your knowledge of the course material
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {!quizCompleted ? (
-              <>
-                {course.quiz && course.quiz.questions && course.quiz.questions.map((question, questionIndex: number) => (
-                  <div key={question.id} className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <h3 className="font-medium">
-                        Question {questionIndex + 1}: {question.question}
-                      </h3>
-                      {speechSupported && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleSpeak(`Question ${questionIndex + 1}: ${question.question}. ${question.options.join('. ')}`)}
-                        >
-                          <Volume2 className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
-                    <div className="space-y-2">
-                      {question.options.map((option: string, optionIndex: number) => (
-                        <label 
-                          key={optionIndex}
-                          className={`flex items-center space-x-2 p-3 border rounded cursor-pointer hover:bg-gray-50 ${
-                            quizAnswers[questionIndex] === optionIndex ? 'bg-blue-50 border-blue-300' : ''
-                          }`}
-                        >
-                          <input
-                            type="radio"
-                            name={`question-${questionIndex}`}
-                            value={optionIndex}
-                            checked={quizAnswers[questionIndex] === optionIndex}
-                            onChange={() => handleQuizAnswer(questionIndex, optionIndex)}
-                            className="text-blue-600"
-                          />
-                          <span>{option}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-                <Button 
-                  onClick={submitQuiz} 
-                  disabled={!canSubmitQuiz}
-                  className="w-full"
-                >
-                  Submit Quiz
-                </Button>
-              </>
-            ) : (
-              <div className="text-center space-y-4">
-                <div className="text-6xl">
-                  {quizScore >= 70 ? "🎉" : "📚"}
-                </div>
-                <h3 className="text-2xl font-bold">
-                  Quiz Complete!
-                </h3>
-                <p className="text-lg">
-                  Your Score: <span className="font-bold text-blue-600">{quizScore}%</span>
-                </p>
-                {quizScore >= 70 ? (
-                  <div className="space-y-2">
-                    <p className="text-green-600 font-medium">Congratulations! You passed!</p>
-                    <div className="flex items-center justify-center">
-                      <Award className="h-5 w-5 mr-2 text-yellow-500" />
-                      <span>Certificate earned</span>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-orange-600">
-                    You need 70% to pass. Review the content and try again!
-                  </p>
-                )}
-                <div className="flex gap-2 justify-center">
-                  <Button variant="outline" onClick={() => {
-                    setQuizCompleted(false);
-                    setQuizAnswers([]);
-                    setQuizScore(0);
-                  }}>
-                    Retake Quiz
-                  </Button>
-                  <Button onClick={onBack}>
-                    Back to Courses
-                  </Button>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      <CourseQuizSelector
+        course={course}
+        onBack={() => setShowQuiz(false)}
+        userRole={userRole}
+      />
     );
   }
 
@@ -428,12 +264,12 @@ const CourseContent = ({ courseId, onBack, userRole }: CourseContentProps) => {
                 }}
                 disabled={course?.content ? completedContent.length < course.content.length : true}
                 aria-label={course?.content && completedContent.length < course.content.length ? 
-                  "Complete all sections before finishing the course" : "Complete Course"}
+                  "Complete all sections before finishing the course" : "Take Course Quiz"}
                 title={course?.content && completedContent.length < course.content.length ? 
-                  "Complete all sections before finishing the course" : "Complete Course"}
+                  "Complete all sections before finishing the course" : "Take Course Quiz"}
               >
                 <Award className="h-4 w-4" />
-                <span>{userRole === 'learner' ? 'Complete Course' : 'Final Quiz'}</span>
+                <span>Course Quiz</span>
                 {quizCompleted && (
                   <CheckCircle className="h-4 w-4 text-green-600" />
                 )}
@@ -569,7 +405,12 @@ const CourseContent = ({ courseId, onBack, userRole }: CourseContentProps) => {
                   }
                 >
                   {course.content && currentContentIndex === course.content.length - 1 
-                    ? (userRole === 'learner' ? 'Complete Course' : 'Take Quiz') 
+                    ? (
+                      <div className="flex items-center">
+                        <Sparkles className="h-4 w-4 mr-1" />
+                        <span>Take Content Quiz</span>
+                      </div>
+                    ) 
                     : 'Next'}
                 </Button>
               </div>
