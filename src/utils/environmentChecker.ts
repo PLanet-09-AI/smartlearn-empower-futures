@@ -6,7 +6,6 @@
 interface EnvironmentConfig {
   openAI: {
     isConfigured: boolean;
-    apiKey: string;
     model: string;
   };
   firebase: {
@@ -20,8 +19,7 @@ interface EnvironmentConfig {
 export function validateEnvironment(): EnvironmentConfig {
   const config: EnvironmentConfig = {
     openAI: {
-      isConfigured: false,
-      apiKey: import.meta.env.VITE_OPENAI_API_KEY || '',
+      isConfigured: true,
       model: import.meta.env.VITE_OPENAI_MODEL || 'gpt-4o-mini',
     },
     firebase: {
@@ -32,8 +30,7 @@ export function validateEnvironment(): EnvironmentConfig {
     }
   };
 
-  // Check if OpenAI is configured
-  config.openAI.isConfigured = !!config.openAI.apiKey;
+  // No API key check needed for OpenAI in frontend
 
   // Validate Firebase (basic check)
   config.firebase.isConfigured = !!(
@@ -55,12 +52,8 @@ export function logEnvironmentStatus(): void {
   if (config.openAI.isConfigured) {
     console.log('✅ OpenAI: Configured');
     console.log(`   � Model: ${config.openAI.model}`);
-    console.log(`   � API Key: ${config.openAI.apiKey ? '[REDACTED]' : 'Not set'}`);
   } else {
     console.log('❌ OpenAI: Not Configured');
-    if (!config.openAI.apiKey) {
-      console.log('   🔑 Missing: VITE_OPENAI_API_KEY');
-    }
     console.log('   � Add your OpenAI API key to .env.development.local');
   }
   

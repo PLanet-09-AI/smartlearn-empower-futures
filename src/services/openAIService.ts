@@ -5,20 +5,15 @@ interface Message {
 }
 
 class OpenAIService {
-  private apiKey: string;
+  // private apiKey: string; // No longer needed in frontend
   private model: string;
   private isConfigured: boolean = false;
 
   constructor() {
-    // Get values from environment variables using Vite's import.meta.env
-    this.apiKey = import.meta.env.VITE_OPENAI_API_KEY || '';
     this.model = import.meta.env.VITE_OPENAI_MODEL || 'gpt-4o-mini';
-    
     // Debug log to verify configuration
     console.log('OpenAI configuration:');
     console.log('MODEL:', this.model);
-    console.log('API KEY:', this.apiKey ? '[REDACTED]' : 'Not set');
-    
     // Validate configuration
     this.validateConfiguration();
   }
@@ -27,15 +22,10 @@ class OpenAIService {
    * Validate OpenAI configuration
    */
   private validateConfiguration(): void {
-    // Check if API key is provided
-    this.isConfigured = !!this.apiKey;
-    
-    if (this.isConfigured) {
-      console.log('✅ OpenAI configuration validated successfully');
-      console.log(`🚀 Using model: ${this.model}`);
-    } else {
-      console.warn('❌ OpenAI configuration is incomplete');
-    }
+    // No API key validation needed in frontend
+    this.isConfigured = true;
+    console.log('✅ OpenAI configuration validated (frontend, using Netlify Function)');
+    console.log(`🚀 Using model: ${this.model}`);
   }
 
   /**
