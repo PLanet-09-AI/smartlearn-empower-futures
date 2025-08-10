@@ -1,15 +1,13 @@
 /**
  * Environment Configuration Checker
- * Validates Azure OpenAI and other environment variables
+ * Validates OpenAI and other environment variables
  */
 
 interface EnvironmentConfig {
-  azureOpenAI: {
+  openAI: {
     isConfigured: boolean;
     apiKey: string;
-    endpoint: string;
-    deploymentName: string;
-    apiVersion: string;
+    model: string;
   };
   firebase: {
     isConfigured: boolean;
@@ -21,12 +19,10 @@ interface EnvironmentConfig {
 
 export function validateEnvironment(): EnvironmentConfig {
   const config: EnvironmentConfig = {
-    azureOpenAI: {
+    openAI: {
       isConfigured: false,
-      apiKey: import.meta.env.VITE_AZURE_OPENAI_API_KEY || '',
-      endpoint: import.meta.env.VITE_AZURE_OPENAI_ENDPOINT || '',
-      deploymentName: import.meta.env.VITE_AZURE_OPENAI_DEPLOYMENT_NAME || 'gpt-4o-mini',
-      apiVersion: import.meta.env.VITE_AZURE_OPENAI_API_VERSION || '2023-05-15',
+      apiKey: import.meta.env.VITE_OPENAI_API_KEY || '',
+      model: import.meta.env.VITE_OPENAI_MODEL || 'gpt-4o-mini',
     },
     firebase: {
       isConfigured: false,
@@ -36,12 +32,8 @@ export function validateEnvironment(): EnvironmentConfig {
     }
   };
 
-  // Validate Azure OpenAI
-  config.azureOpenAI.isConfigured = !!(
-    config.azureOpenAI.apiKey && 
-    config.azureOpenAI.endpoint &&
-    config.azureOpenAI.endpoint.includes('.openai.azure.com')
-  );
+  // Check if OpenAI is configured
+  config.openAI.isConfigured = !!config.openAI.apiKey;
 
   // Validate Firebase (basic check)
   config.firebase.isConfigured = !!(
@@ -59,21 +51,17 @@ export function logEnvironmentStatus(): void {
   console.log('🔧 Environment Configuration Status:');
   console.log('=====================================');
   
-  // Azure OpenAI Status
-  if (config.azureOpenAI.isConfigured) {
-    console.log('✅ Azure OpenAI: Configured');
-    console.log(`   📍 Endpoint: ${config.azureOpenAI.endpoint}`);
-    console.log(`   🚀 Deployment: ${config.azureOpenAI.deploymentName}`);
-    console.log(`   📝 API Version: ${config.azureOpenAI.apiVersion}`);
+  // OpenAI Status
+  if (config.openAI.isConfigured) {
+    console.log('✅ OpenAI: Configured');
+    console.log(`   � Model: ${config.openAI.model}`);
+    console.log(`   � API Key: ${config.openAI.apiKey ? '[REDACTED]' : 'Not set'}`);
   } else {
-    console.log('❌ Azure OpenAI: Not Configured');
-    if (!config.azureOpenAI.apiKey) {
-      console.log('   🔑 Missing: VITE_AZURE_OPENAI_API_KEY');
+    console.log('❌ OpenAI: Not Configured');
+    if (!config.openAI.apiKey) {
+      console.log('   🔑 Missing: VITE_OPENAI_API_KEY');
     }
-    if (!config.azureOpenAI.endpoint) {
-      console.log('   🔗 Missing: VITE_AZURE_OPENAI_ENDPOINT');
-    }
-    console.log('   📖 See AZURE_OPENAI_SETUP.md for configuration help');
+    console.log('   � Add your OpenAI API key to .env.development.local');
   }
   
   // Firebase Status

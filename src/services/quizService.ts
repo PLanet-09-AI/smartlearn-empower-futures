@@ -1,6 +1,6 @@
 import { db } from '@/lib/firebase';
 import { 
-  collection, doc, getDoc, updateDoc, addDoc, 
+  collection, doc, getDoc, updateDoc, addDoc, setDoc,
   serverTimestamp, getDocs, query, where, Timestamp 
 } from 'firebase/firestore';
 import { 
@@ -9,29 +9,43 @@ import {
   QuizQuestion, 
   QuizResult, 
   QuizAnswer,
-  LeaderboardEntry 
+  LeaderboardEntry,
+  QuizAnalytics,
+  QuestionAnalytics,
+  UserQuizResult
 } from '@/types';
-import { azureOpenAIService } from './azureOpenAIService';
+import { openAIService } from './openAIService';
 import { v4 as uuidv4 } from 'uuid';
 
 export class QuizService {
   private coursesCollection = 'courses';
   private quizResultsCollection = 'quizResults';
   private quizAnswersCollection = 'quizAnswers';
+  private quizAnalyticsCollection = 'quizAnalytics';
 
   /**
    * Starts a new AI-powered quiz based on course content
    * @param courseId The ID of the course to generate a quiz for
    * @param userId The ID of the user taking the quiz
    * @param numQuestions Number of questions to generate (default: 5)
+   * @param customPrompt Optional custom prompt from the lecturer
+   * @param temperature Optional temperature setting (0.0-1.0)
    */
-  async startQuiz(courseId: string, userId: string, numQuestions: number = 5): Promise<{
+  async startQuiz(
+    courseId: string, 
+    userId: string, 
+    numQuestions: number = 5,
+    customPrompt?: string,
+    temperature: number = 0.7
+  ): Promise<{
     quiz: Quiz,
     quizResultId: string,
     generatedAt: Date
   }> {
     try {
       console.log(`Starting AI quiz for course ${courseId} with ${numQuestions} questions`);
+      console.log(`Using temperature: ${temperature}`);
+      if (customPrompt) console.log(`Using custom prompt engineering`);
       
       // Get the course content
       const courseRef = doc(db, this.coursesCollection, courseId);
@@ -59,8 +73,8 @@ export class QuizService {
       
       const generatedAt = new Date();
       
-      // Generate quiz questions using Azure OpenAI directly from course content
-      const quizPrompt = `
+      // Generate quiz questions using OpenAI directly from course content
+      const defaultQuizPrompt = `
 I need you to create a quiz based on the following course content:
 
 Course Title: ${courseData.title}
@@ -79,10 +93,18 @@ Return your response as a JSON array of objects, each with:
 Make sure questions are varied and cover different sections of the content. The correct answer should be well-explained.
 `;
 
-      const questionsJson = await azureOpenAIService.generateText([
+      // Use custom prompt if provided, otherwise use default
+      const finalPrompt = customPrompt 
+        ? customPrompt.replace("{contentForPrompt}", contentForPrompt)
+                      .replace("{courseTitle}", courseData.title)
+                      .replace("{courseDescription}", courseData.description || '')
+                      .replace("{numQuestions}", numQuestions.toString())
+        : defaultQuizPrompt;
+
+      const questionsJson = await openAIService.generateText([
         { role: "system", content: "You are a quiz generator specializing in accountancy education." },
-        { role: "user", content: quizPrompt }
-      ]);
+        { role: "user", content: finalPrompt }
+      ], temperature);
       
       // 3) Parse and clean up the JSON response
       const questionsData = this.deserializeQuestions(questionsJson);
@@ -399,9 +421,16 @@ Make sure questions are varied and cover different sections of the content. The 
    * Generate AI quiz questions based on course content
    * @param courseId The ID of the course
    * @param numQuestions Number of questions to generate
+   * @param customPrompt Optional custom prompt from the lecturer
+   * @param temperature Optional temperature setting (0.0-1.0)
    */
-  async generateAIQuiz(courseId: string, numQuestions: number = 5): Promise<Quiz> {
-    const { quiz } = await this.startQuiz(courseId, 'system', numQuestions);
+  async generateAIQuiz(
+    courseId: string, 
+    numQuestions: number = 5,
+    customPrompt?: string,
+    temperature: number = 0.7
+  ): Promise<Quiz> {
+    const { quiz } = await this.startQuiz(courseId, 'system', numQuestions, customPrompt, temperature);
     return quiz;
   }
 
@@ -487,6 +516,363 @@ Make sure questions are varied and cover different sections of the content. The 
     } catch (error) {
       console.error('Error getting user course scores:', error);
       return [];
+    }
+  }
+
+  /**
+   * Get detailed quiz analytics for lecturers and admins
+   * @param courseId Optional course ID to filter by
+   */
+  async getQuizAnalytics(courseId?: string): Promise<QuizAnalytics[]> {
+    try {
+      // 1) Query the analytics collection first for cached analytics
+      let quizAnalyticsRef = collection(db, this.quizAnalyticsCollection);
+      let q = courseId 
+        ? query(quizAnalyticsRef, where("courseId", "==", courseId))
+        : quizAnalyticsRef;
+      
+      const analyticsSnapshot = await getDocs(q);
+      const analyticsExists = !analyticsSnapshot.empty;
+      
+      // If we have cached analytics and they're recent (within 1 hour), use them
+      if (analyticsExists) {
+        const analytics: QuizAnalytics[] = [];
+        analyticsSnapshot.forEach(doc => {
+          const data = doc.data() as any;
+          // Convert timestamps to dates
+          const userResults = data.userResults?.map((user: any) => ({
+            ...user,
+            attemptedAt: user.attemptedAt?.toDate() || new Date()
+          })) || [];
+          
+          analytics.push({
+            ...data,
+            userResults
+          });
+        });
+        
+        // Check if the analytics are fresh (within the last hour)
+        const isFresh = analytics.every(a => {
+          const lastUpdated = a.lastUpdated?.toDate() || new Date(0);
+          const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+          return lastUpdated > oneHourAgo;
+        });
+        
+        if (isFresh) {
+          console.log('Using cached quiz analytics');
+          return analytics;
+        }
+      }
+      
+      // Otherwise, generate new analytics
+      console.log('Generating fresh quiz analytics');
+      
+      // 2) Query quiz results
+      let quizResultsRef = collection(db, this.quizResultsCollection);
+      let resultsQuery = query(quizResultsRef, where("isCompleted", "==", true));
+      
+      if (courseId) {
+        resultsQuery = query(resultsQuery, where("courseId", "==", courseId));
+      }
+      
+      const resultsSnapshot = await getDocs(resultsQuery);
+      
+      // 3) Group results by quiz ID
+      const quizGroups: Record<string, any[]> = {};
+      
+      for (const resultDoc of resultsSnapshot.docs) {
+        const resultData = resultDoc.data();
+        const quizId = resultData.id;
+        
+        if (!quizGroups[quizId]) {
+          quizGroups[quizId] = [];
+        }
+        
+        quizGroups[quizId].push(resultData);
+      }
+      
+      // 4) For each quiz, calculate analytics
+      const allAnalytics: QuizAnalytics[] = [];
+      
+      for (const [quizId, results] of Object.entries(quizGroups)) {
+        // Skip if no results
+        if (results.length === 0) continue;
+        
+        // Use first result to get course info
+        const courseRef = doc(db, this.coursesCollection, results[0].courseId);
+        const courseDoc = await getDoc(courseRef);
+        const courseName = courseDoc.exists() ? (courseDoc.data() as Course).title : 'Unknown Course';
+        
+        // Calculate average score
+        const totalScore = results.reduce((sum, r) => sum + r.score, 0);
+        const averageScore = Math.round(totalScore / results.length);
+        
+        // Group attempts by date
+        const attemptsByDate: Record<string, number> = {};
+        for (const result of results) {
+          if (!result.attemptedAt) continue;
+          
+          const date = result.attemptedAt.toDate().toISOString().split('T')[0];
+          attemptsByDate[date] = (attemptsByDate[date] || 0) + 1;
+        }
+        
+        // Calculate score distribution
+        const scoreDistribution = {
+          excellent: 0, // 90-100%
+          good: 0,      // 70-89% 
+          average: 0,   // 50-69%
+          poor: 0       // 0-49%
+        };
+        
+        for (const result of results) {
+          const score = result.score;
+          if (score >= 90) scoreDistribution.excellent++;
+          else if (score >= 70) scoreDistribution.good++;
+          else if (score >= 50) scoreDistribution.average++;
+          else scoreDistribution.poor++;
+        }
+        
+        // Get user details and individual answers
+        const userResults: UserQuizResult[] = [];
+        for (const result of results) {
+          // Get user name
+          const userName = await this.getUserName(result.userId);
+          
+          // Get answers for this quiz attempt
+          const answersQuery = query(
+            collection(db, this.quizAnswersCollection),
+            where("quizResultId", "==", result.id)
+          );
+          const answersSnapshot = await getDocs(answersQuery);
+          
+          // Parse questions from JSON
+          const questions = this.deserializeQuestions(result.questionsJson);
+          
+          // Process answers
+          const answers: any[] = [];
+          answersSnapshot.forEach(answerDoc => {
+            const answerData = answerDoc.data();
+            const questionId = answerData.questionId;
+            
+            // Find question data
+            const questionData = questions.find(q => `q_${q.id}` === questionId);
+            if (!questionData) return;
+            
+            // Find selected and correct options
+            const selectedOptionId = answerData.selectedOptionId;
+            const selectedOption = questionData.options[selectedOptionId];
+            const correctOption = questionData.options.find(o => o.isCorrect);
+            
+            if (!selectedOption || !correctOption) return;
+            
+            answers.push({
+              questionId: questionId,
+              questionText: questionData.text,
+              selectedOption: selectedOption.text,
+              isCorrect: answerData.isCorrect,
+              correctOption: correctOption.text
+            });
+          });
+          
+          // Add to user results
+          userResults.push({
+            userId: result.userId,
+            userName: userName,
+            score: result.score,
+            timeTaken: result.attemptedAt && result.generatedAt ? 
+              result.attemptedAt.toDate().getTime() - result.generatedAt.toDate().getTime() : 0,
+            attemptedAt: result.attemptedAt ? result.attemptedAt.toDate() : null,
+            answers: answers
+          });
+        }
+        
+        // Calculate question analytics
+        const questionAnalytics: QuestionAnalytics[] = [];
+        const firstQuizResult = results[0];
+        if (firstQuizResult && firstQuizResult.questionsJson) {
+          const questions = this.deserializeQuestions(firstQuizResult.questionsJson);
+          
+          for (const question of questions) {
+            const questionId = `q_${question.id}`;
+            
+            // Count correct/incorrect answers for this question
+            let correctCount = 0;
+            let incorrectCount = 0;
+            const optionCounts: Record<number, number> = {};
+            
+            // Initialize option counts
+            question.options.forEach((_, index) => {
+              optionCounts[index] = 0;
+            });
+            
+            // Aggregate answers from all users
+            for (const userResult of userResults) {
+              const answer = userResult.answers.find(a => a.questionId === questionId);
+              if (answer) {
+                if (answer.isCorrect) correctCount++;
+                else incorrectCount++;
+                
+                // Find the option index
+                const optionIndex = question.options.findIndex(o => o.text === answer.selectedOption);
+                if (optionIndex >= 0) {
+                  optionCounts[optionIndex] = (optionCounts[optionIndex] || 0) + 1;
+                }
+              }
+            }
+            
+            const totalAnswers = correctCount + incorrectCount;
+            const correctPercentage = totalAnswers > 0 ? Math.round((correctCount / totalAnswers) * 100) : 0;
+            
+            // Find correct answer text
+            const correctOption = question.options.find(o => o.isCorrect);
+            
+            questionAnalytics.push({
+              questionId,
+              questionText: question.text,
+              correctAnswerText: correctOption?.text || 'Unknown',
+              correctCount,
+              incorrectCount,
+              correctPercentage,
+              optionCounts
+            });
+          }
+        }
+        
+        // Create the analytics object
+        const analytics: QuizAnalytics = {
+          quizId,
+          courseId: results[0].courseId,
+          courseName,
+          totalAttempts: results.length,
+          averageScore,
+          questionAnalytics,
+          attemptsByDate,
+          scoreDistribution,
+          userResults,
+          lastUpdated: Timestamp.now()
+        };
+        
+        // Save to Firestore for future use
+        const analyticsRef = doc(db, this.quizAnalyticsCollection, quizId);
+        await setDoc(analyticsRef, analytics);
+        
+        allAnalytics.push(analytics);
+      }
+      
+      return allAnalytics;
+    } catch (error) {
+      console.error('Error getting quiz analytics:', error);
+      throw new Error('Failed to get quiz analytics');
+    }
+  }
+  
+  /**
+   * Get analytics for a specific course
+   * @param courseId The course ID
+   */
+  async getCourseQuizAnalytics(courseId: string): Promise<QuizAnalytics | null> {
+    try {
+      const allAnalytics = await this.getQuizAnalytics(courseId);
+      return allAnalytics.length > 0 ? allAnalytics[0] : null;
+    } catch (error) {
+      console.error('Error getting course quiz analytics:', error);
+      return null;
+    }
+  }
+  
+  /**
+   * Get detailed user quiz history
+   * @param userId The user ID
+   * @param includeAnswers Whether to include detailed answer information
+   */
+  async getUserQuizHistory(userId: string, includeAnswers: boolean = false): Promise<any[]> {
+    try {
+      const q = query(
+        collection(db, this.quizResultsCollection),
+        where("userId", "==", userId),
+        where("isCompleted", "==", true)
+      );
+      
+      const snapshot = await getDocs(q);
+      const results: any[] = [];
+      
+      for (const quizDoc of snapshot.docs) {
+        const quizData = quizDoc.data();
+        
+        // Get course name
+        const courseRef = doc(db, this.coursesCollection, quizData.courseId);
+        const courseDoc = await getDoc(courseRef);
+        const courseName = courseDoc.exists() ? (courseDoc.data() as Course).title : 'Unknown Course';
+        
+        // Calculate time taken
+        const generatedAt = quizData.generatedAt?.toDate();
+        const attemptedAt = quizData.attemptedAt?.toDate();
+        const timeTaken = generatedAt && attemptedAt ? 
+          attemptedAt.getTime() - generatedAt.getTime() : 0;
+          
+        // Build result object
+        const result: any = {
+          id: quizData.id,
+          courseId: quizData.courseId,
+          courseName: courseName,
+          score: quizData.score,
+          attemptedAt: attemptedAt,
+          timeTaken: timeTaken
+        };
+        
+        // Add answer details if requested
+        if (includeAnswers) {
+          // Get answer details
+          const answersQuery = query(
+            collection(db, this.quizAnswersCollection),
+            where("quizResultId", "==", quizData.id)
+          );
+          const answersSnapshot = await getDocs(answersQuery);
+          
+          // Parse questions
+          const questions = this.deserializeQuestions(quizData.questionsJson || '[]');
+          const answers: any[] = [];
+          
+          answersSnapshot.forEach(answerDoc => {
+            const answerData = answerDoc.data();
+            const questionId = answerData.questionId;
+            
+            // Find question
+            const questionData = questions.find(q => `q_${q.id}` === questionId);
+            if (!questionData) return;
+            
+            // Find option details
+            const selectedOptionId = answerData.selectedOptionId;
+            const selectedOption = questionData.options[selectedOptionId];
+            const correctOption = questionData.options.find(o => o.isCorrect);
+            
+            if (!selectedOption || !correctOption) return;
+            
+            answers.push({
+              questionId: questionId,
+              questionText: questionData.text,
+              selectedOption: selectedOption.text,
+              isCorrect: answerData.isCorrect,
+              correctOption: correctOption.text,
+              explanation: selectedOption.explanation
+            });
+          });
+          
+          result.answers = answers;
+        }
+        
+        results.push(result);
+      }
+      
+      // Sort by most recent first
+      return results.sort((a, b) => {
+        if (!a.attemptedAt || !b.attemptedAt) return 0;
+        return b.attemptedAt.getTime() - a.attemptedAt.getTime();
+      });
+      
+    } catch (error) {
+      console.error('Error getting user quiz history:', error);
+      throw new Error('Failed to get user quiz history');
     }
   }
 }

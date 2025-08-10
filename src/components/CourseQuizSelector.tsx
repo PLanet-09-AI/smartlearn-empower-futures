@@ -2,9 +2,10 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Course } from "@/types";
-import { ArrowLeft, BookOpen, Award, Sparkles } from "lucide-react";
+import { ArrowLeft, BookOpen, Award, Sparkles, BarChart } from "lucide-react";
 import AIQuizGenerator from "./AIQuizGenerator";
 import QuizLeaderboard from "./QuizLeaderboard";
+import QuizAnalyticsDashboard from "./QuizAnalyticsDashboard";
 import { useAuth } from "@/contexts/AuthContext";
 
 interface CourseQuizSelectorProps {
@@ -36,7 +37,7 @@ const CourseQuizSelector = ({ course, onBack, userRole = 'learner' }: CourseQuiz
       </div>
       
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="ai">
             <Sparkles className="h-4 w-4 mr-2" />
             Content Quiz
@@ -49,6 +50,10 @@ const CourseQuizSelector = ({ course, onBack, userRole = 'learner' }: CourseQuiz
             <Award className="h-4 w-4 mr-2" />
             Leaderboard
           </TabsTrigger>
+          <TabsTrigger value="analytics" disabled={userRole !== 'educator' && userRole !== 'admin'}>
+            <BarChart className="h-4 w-4 mr-2" />
+            Analytics
+          </TabsTrigger>
         </TabsList>
         
         <TabsContent value="ai" className="mt-6">
@@ -56,6 +61,7 @@ const CourseQuizSelector = ({ course, onBack, userRole = 'learner' }: CourseQuiz
             courseId={courseId}
             courseTitle={course.title}
             onQuizComplete={handleQuizComplete}
+            isLecturer={userRole === 'educator' || userRole === 'admin'}
           />
         </TabsContent>
         
@@ -81,6 +87,13 @@ const CourseQuizSelector = ({ course, onBack, userRole = 'learner' }: CourseQuiz
         
         <TabsContent value="leaderboard" className="mt-6">
           <QuizLeaderboard courseId={courseId} />
+        </TabsContent>
+        
+        <TabsContent value="analytics" className="mt-6">
+          <QuizAnalyticsDashboard 
+            courseId={courseId} 
+            isAdmin={userRole === 'admin'} 
+          />
         </TabsContent>
       </Tabs>
     </div>

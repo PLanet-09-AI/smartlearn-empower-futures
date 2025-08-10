@@ -101,3 +101,57 @@ export interface QuizResultViewModel {
   userAnswers: Record<string, string>;
   attemptedAt: Date;
 }
+
+export interface LecturerPromptConfig {
+  customPrompt?: string;
+  temperature?: number;
+  isEnabled: boolean;
+}
+
+// Interfaces for Quiz Analytics
+
+export interface QuizAnalytics {
+  quizId: string;
+  courseId: string;
+  courseName: string;
+  totalAttempts: number;
+  averageScore: number;
+  questionAnalytics: QuestionAnalytics[];
+  attemptsByDate: Record<string, number>;
+  scoreDistribution: ScoreDistribution;
+  userResults: UserQuizResult[];
+  lastUpdated?: any; // Firestore Timestamp or Date
+}
+
+export interface QuestionAnalytics {
+  questionId: string;
+  questionText: string;
+  correctAnswerText: string;
+  correctCount: number;
+  incorrectCount: number;
+  correctPercentage: number;
+  optionCounts: Record<number, number>; // Count of each option selected
+}
+
+export interface ScoreDistribution {
+  excellent: number; // 90-100%
+  good: number;      // 70-89% 
+  average: number;   // 50-69%
+  poor: number;      // 0-49%
+}
+
+export interface UserQuizResult {
+  userId: string;
+  userName: string;
+  score: number;
+  timeTaken: number;
+  attemptedAt: Date | any;
+  answers: {
+    questionId: string;
+    questionText: string;
+    selectedOption: string;
+    isCorrect: boolean;
+    correctOption: string;
+    explanation?: string;
+  }[];
+}
