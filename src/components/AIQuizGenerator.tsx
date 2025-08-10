@@ -392,7 +392,8 @@ Make sure to create varied questions covering different sections of the content.
                               Quiz Instructions
                             </Label>
                             <p className="text-sm text-slate-600 mb-4">
-                              Only the instructions for question generation can be customized.
+                              Only the instructions for question generation can be customized.<br />
+                              <span className="text-xs text-amber-700 font-semibold">Recommended: Keep instructions under 500 characters for best performance.</span>
                             </p>
                           </div>
                           <div className="bg-white border rounded-lg shadow-sm overflow-hidden">
@@ -417,9 +418,14 @@ Make sure to create varied questions covering different sections of the content.
                                 rows={6}
                                 className="font-mono text-sm"
                               />
-                              <p className="text-xs text-slate-500 mt-2">
-                                This is the only editable section. Course details and content are locked.
-                              </p>
+                              <div className="flex justify-between items-center mt-2">
+                                <p className="text-xs text-slate-500">
+                                  This is the only editable section. Course details and content are locked.
+                                </p>
+                                <span className={`text-xs ${((editablePrompt.split("INSTRUCTIONS:")[1] || '').length > 500) ? 'text-red-600' : 'text-slate-400'}`}>
+                                  Characters: {(editablePrompt.split("INSTRUCTIONS:")[1] || '').length} / 500
+                                </span>
+                              </div>
                             </div>
                           </div>
                           {/* JSON Format Section (Non-editable) */}
