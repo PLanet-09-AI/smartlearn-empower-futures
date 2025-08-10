@@ -1,5 +1,3 @@
-import axios from 'axios';
-
 // Message interface for Azure OpenAI API
 interface Message {
   role: 'system' | 'user' | 'assistant';
@@ -11,13 +9,47 @@ class AzureOpenAIService {
   private endpoint: string;
   private deploymentName: string;
   private apiVersion: string;
+  private isConfigured: boolean = false;
 
   constructor() {
     // Get values from environment variables using Vite's import.meta.env
     this.apiKey = import.meta.env.VITE_AZURE_OPENAI_API_KEY || '';
     this.endpoint = import.meta.env.VITE_AZURE_OPENAI_ENDPOINT || '';
     this.deploymentName = import.meta.env.VITE_AZURE_OPENAI_DEPLOYMENT_NAME || 'gpt-4o-mini';
-    this.apiVersion = '2023-05-15'; // Update to the latest version as needed
+    this.apiVersion = import.meta.env.VITE_AZURE_OPENAI_API_VERSION || '2023-05-15';
+    
+    // Validate configuration
+    this.validateConfiguration();
+  }
+
+  /**
+   * Validate Azure OpenAI configuration
+   */
+  private validateConfiguration(): void {
+    if (!this.apiKey || !this.endpoint) {
+      console.warn('⚠️ Azure OpenAI credentials not configured.');
+      console.warn('Please set the following environment variables:');
+      console.warn('- VITE_AZURE_OPENAI_API_KEY: Your Azure OpenAI API key');
+      console.warn('- VITE_AZURE_OPENAI_ENDPOINT: Your Azure OpenAI endpoint URL');
+      console.warn('- VITE_AZURE_OPENAI_DEPLOYMENT_NAME: Your deployment name (optional, defaults to gpt-4o-mini)');
+      this.isConfigured = false;
+      return;
+    }
+
+    // Validate endpoint format
+    if (!this.endpoint.startsWith('https://') || !this.endpoint.includes('.openai.azure.com')) {
+      console.error('❌ Invalid Azure OpenAI endpoint format. Expected: https://your-resource-name.openai.azure.com/');
+      this.isConfigured = false;
+      return;
+    }
+
+    // Remove trailing slash from endpoint if present
+    this.endpoint = this.endpoint.replace(/\/$/, '');
+    
+    console.log('✅ Azure OpenAI configuration validated successfully');
+    console.log(`🚀 Using deployment: ${this.deploymentName}`);
+    console.log(`🔗 Endpoint: ${this.endpoint}`);
+    this.isConfigured = true;
   }
 
   /**
@@ -28,37 +60,67 @@ class AzureOpenAIService {
   async generateText(messages: Message[]): Promise<string> {
     try {
       // Check if API key and endpoint are configured
-      if (!this.apiKey || !this.endpoint) {
-        console.warn('Azure OpenAI credentials not configured. Using mock response.');
+      if (!this.isConfigured) {
+        console.warn('🔄 Azure OpenAI not configured. Using mock response for development.');
         return this.getMockResponse(messages);
       }
 
       const url = `${this.endpoint}/openai/deployments/${this.deploymentName}/chat/completions?api-version=${this.apiVersion}`;
+      
+      console.log('🤖 Calling Azure OpenAI API...');
+      console.log(`📍 Endpoint: ${url}`);
+      console.log(`💬 Messages: ${messages.length} message(s)`);
 
-      const response = await axios.post(
-        url,
-        {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'api-key': this.apiKey,
+        },
+        body: JSON.stringify({
           messages,
-          max_tokens: 1000,
+          max_tokens: 2000, // Increased for quiz generation
           temperature: 0.7,
           top_p: 1,
           frequency_penalty: 0,
           presence_penalty: 0,
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'api-key': this.apiKey,
-          },
-        }
-      );
+        }),
+      });
 
-      return response.data.choices[0].message.content;
-    } catch (error) {
-      console.error('Error calling Azure OpenAI:', error);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const generatedText = data.choices[0].message.content;
+      console.log('✅ Azure OpenAI API call successful');
+      console.log(`📝 Generated ${generatedText.length} characters`);
+      
+      return generatedText;
+    } catch (error: any) {
+      console.error('❌ Error calling Azure OpenAI:', error);
+      
+      // Detailed error logging
+      if (error.message?.includes('HTTP error')) {
+        const status = error.message.match(/status: (\d+)/)?.[1];
+        console.error('� Response status:', status);
+        
+        // Handle specific error cases
+        if (status === '401') {
+          console.error('🔑 Authentication failed. Please check your API key.');
+        } else if (status === '404') {
+          console.error('🎯 Deployment not found. Please check your deployment name and endpoint.');
+        } else if (status === '429') {
+          console.error('⏳ Rate limit exceeded. Please try again later.');
+        }
+      } else if (error.name === 'TypeError') {
+        console.error('🌐 Network error. Please check your internet connection and endpoint URL.');
+      } else {
+        console.error('⚠️ Error details:', error.message);
+      }
       
       // Fallback to mock response in case of API failure
-      console.warn('Using mock response due to API error');
+      console.warn('🔄 Using mock response due to API error');
       return this.getMockResponse(messages);
     }
   }

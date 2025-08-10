@@ -4,6 +4,10 @@ interface ImportMetaEnv {
   readonly VITE_AZURE_OPENAI_API_KEY: string;
   readonly VITE_AZURE_OPENAI_ENDPOINT: string;
   readonly VITE_AZURE_OPENAI_DEPLOYMENT_NAME: string;
+  readonly VITE_AZURE_OPENAI_API_VERSION: string;
+  readonly DEV: boolean;
+  readonly MODE: string;
+  readonly PROD: boolean;
   // Add other environment variables as needed
   readonly VITE_FIREBASE_API_KEY: string;
   readonly VITE_FIREBASE_AUTH_DOMAIN: string;

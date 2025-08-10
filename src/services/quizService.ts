@@ -140,7 +140,9 @@ Make sure questions are varied and cover different sections of the content. The 
     explanations: Record<string, string>,
     correctAnswers: Record<string, string>,
     userAnswers: Record<string, string>,
-    attemptedAt: Date
+    attemptedAt: Date,
+    isNewHighScore: boolean,
+    previousHighScore: number
   }> {
     try {
       // 1) Load the quiz result
@@ -165,6 +167,10 @@ Make sure questions are varied and cover different sections of the content. The 
       
       // 2) Parse the questions JSON
       const questions = this.deserializeQuestions(quizResult.questionsJson);
+      
+      // 2.1) Check user's previous highest score for this course
+      const previousScores = await this.getUserCourseScores(userId, quizResult.courseId);
+      const previousHighScore = previousScores.length > 0 ? Math.max(...previousScores) : 0;
       
       // 3) Calculate results
       const attemptedAt = new Date();
@@ -217,6 +223,9 @@ Make sure questions are varied and cover different sections of the content. The 
       // 4) Calculate score as percentage
       const score = questions.length > 0 ? Math.round((correctCount / questions.length) * 100) : 0;
       
+      // 4.1) Determine if this is a new high score
+      const isNewHighScore = score > previousHighScore;
+      
       // 5) Update the quiz result
       await updateDoc(quizResultDoc.ref, {
         attemptedAt: Timestamp.fromDate(attemptedAt),
@@ -230,7 +239,9 @@ Make sure questions are varied and cover different sections of the content. The 
         explanations,
         correctAnswers,
         userAnswers,
-        attemptedAt
+        attemptedAt,
+        isNewHighScore,
+        previousHighScore
       };
     } catch (error) {
       console.error('Error submitting quiz:', error);
@@ -259,19 +270,19 @@ Make sure questions are varied and cover different sections of the content. The 
       // 2) Map to leaderboard entries
       const entries: Record<string, LeaderboardEntry[]> = {};
       
-      for (const doc of snapshot.docs) {
-        const data = doc.data() as any;
+      for (const quizDoc of snapshot.docs) {
+        const data = quizDoc.data() as any;
         const userId = data.userId;
         const userName = await this.getUserName(userId);
         const courseRef = await getDoc(doc(db, this.coursesCollection, data.courseId));
-        const courseName = courseRef.exists() ? courseRef.data().title : 'Unknown Course';
+        const courseName = courseRef.exists() ? (courseRef.data() as any)?.title || 'Unknown Course' : 'Unknown Course';
         
         const generatedAt = data.generatedAt?.toDate() || new Date();
         const attemptedAt = data.attemptedAt?.toDate() || new Date();
         const timeTaken = attemptedAt.getTime() - generatedAt.getTime();
         
         const entry: LeaderboardEntry = {
-          id: doc.id,
+          id: quizDoc.id,
           userId: userId,
           userName: userName,
           courseId: data.courseId,
@@ -444,6 +455,38 @@ Make sure questions are varied and cover different sections of the content. The 
     } catch (error) {
       console.error('Error getting user quiz results:', error);
       throw new Error('Failed to get user quiz results');
+    }
+  }
+
+  /**
+   * Get user's previous scores for a specific course
+   * @param userId The ID of the user
+   * @param courseId The ID of the course
+   */
+  async getUserCourseScores(userId: string, courseId: string): Promise<number[]> {
+    try {
+      const q = query(
+        collection(db, this.quizResultsCollection),
+        where("userId", "==", userId),
+        where("courseId", "==", courseId),
+        where("isCompleted", "==", true)
+      );
+      
+      const snapshot = await getDocs(q);
+      const scores: number[] = [];
+      
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        if (data.score !== undefined) {
+          scores.push(data.score);
+        }
+      });
+      
+      console.log(`Previous scores for user ${userId} in course ${courseId}:`, scores);
+      return scores;
+    } catch (error) {
+      console.error('Error getting user course scores:', error);
+      return [];
     }
   }
 }

@@ -36,6 +36,8 @@ const AIQuizGenerator = ({ courseId, courseTitle, onQuizComplete }: AIQuizGenera
     explanations: Record<string, string>;
     correctAnswers: Record<string, string>;
     userAnswers: Record<string, string>;
+    isNewHighScore?: boolean;
+    previousHighScore?: number;
   } | null>(null);
   
   // Generate the AI quiz
@@ -124,16 +126,25 @@ const AIQuizGenerator = ({ courseId, courseTitle, onQuizComplete }: AIQuizGenera
         selectedAnswers: result.selectedAnswers,
         explanations: result.explanations,
         correctAnswers: result.correctAnswers,
-        userAnswers: result.userAnswers
+        userAnswers: result.userAnswers,
+        isNewHighScore: result.isNewHighScore,
+        previousHighScore: result.previousHighScore
       });
       setQuizCompleted(true);
+      
+      // Log high score achievement
+      if (result.isNewHighScore) {
+        console.log(`🎉 NEW HIGH SCORE! User ${currentUser.uid} achieved ${result.score}% (previous best: ${result.previousHighScore}%) in course ${courseId}`);
+      }
       
       // Notify parent component
       onQuizComplete(result.score);
       
       toast({
-        title: "Quiz Submitted",
-        description: `Your score: ${result.score}%`,
+        title: result.isNewHighScore ? "🎉 New High Score!" : "Quiz Submitted",
+        description: result.isNewHighScore 
+          ? `Amazing! You scored ${result.score}% (previous best: ${result.previousHighScore}%)`
+          : `Your score: ${result.score}%`,
         variant: result.score >= 70 ? "default" : "destructive"
       });
     } catch (error) {
@@ -326,6 +337,26 @@ const AIQuizGenerator = ({ courseId, courseTitle, onQuizComplete }: AIQuizGenera
                 <div className="flex items-center justify-center text-orange-600">
                   <X className="h-5 w-5 mr-2" />
                   <span>You need 70% to pass. Review the content and try again!</span>
+                </div>
+              )}
+              
+              {/* High Score Achievement Notification */}
+              {feedback?.isNewHighScore && (
+                <div className="bg-gradient-to-r from-yellow-50 to-orange-50 border border-yellow-200 rounded-lg p-4 text-center">
+                  <div className="text-2xl mb-2">🎉 NEW HIGH SCORE! 🎉</div>
+                  <p className="text-sm text-gray-700">
+                    You've improved from <span className="font-semibold">{feedback.previousHighScore}%</span> to <span className="font-semibold text-green-600">{score}%</span>!
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">This achievement will be reflected on the leaderboard</p>
+                </div>
+              )}
+              
+              {/* Show previous best if not a new high score */}
+              {!feedback?.isNewHighScore && feedback?.previousHighScore !== undefined && feedback.previousHighScore > 0 && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
+                  <p className="text-sm text-blue-700">
+                    Your best score for this course: <span className="font-semibold">{Math.max(score, feedback.previousHighScore)}%</span>
+                  </p>
                 </div>
               )}
               
