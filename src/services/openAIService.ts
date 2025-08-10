@@ -52,28 +52,16 @@ class OpenAIService {
         return this.getMockResponse(messages);
       }
 
-      // Check if API key is configured
-      if (!this.isConfigured) {
-        console.warn('🔄 OpenAI not configured. Using mock response for development.');
-        return this.getMockResponse(messages);
-      }
-
-      const url = 'https://api.openai.com/v1/chat/completions';
-      
-      console.log('🤖 Calling OpenAI API...');
-      console.log(`💬 Messages: ${messages.length} message(s)`);
-      console.log(`🌡️ Temperature: ${temperature}`);
-
-      const response = await fetch(url, {
+      // Call Netlify Function instead of OpenAI directly
+      const response = await fetch('/.netlify/functions/openai-proxy', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.apiKey}`,
         },
         body: JSON.stringify({
           model: this.model,
           messages,
-          max_tokens: 2000, // Increased for quiz generation
+          max_tokens: 2000,
           temperature: temperature,
           top_p: 1,
           frequency_penalty: 0,
@@ -86,33 +74,15 @@ class OpenAIService {
       }
 
       const data = await response.json();
+      if (data.error) {
+        throw new Error(data.error);
+      }
       const generatedText = data.choices[0].message.content;
-      console.log('✅ OpenAI API call successful');
+      console.log('✅ OpenAI (via Netlify Function) call successful');
       console.log(`📝 Generated ${generatedText.length} characters`);
-      
       return generatedText;
     } catch (error: any) {
-      console.error('❌ Error calling OpenAI:', error);
-      
-      // Detailed error logging
-      if (error.message?.includes('HTTP error')) {
-        const status = error.message.match(/status: (\d+)/)?.[1];
-        console.error('� Response status:', status);
-        
-        // Handle specific error cases
-        if (status === '401') {
-          console.error('🔑 Authentication failed. Please check your API key.');
-        } else if (status === '404') {
-          console.error('🎯 Model not found. Please check your model name.');
-        } else if (status === '429') {
-          console.error('⏳ Rate limit exceeded. Please try again later.');
-        }
-      } else if (error.name === 'TypeError') {
-        console.error('🌐 Network error. Please check your internet connection.');
-      } else {
-        console.error('⚠️ Error details:', error.message);
-      }
-      
+      console.error('❌ Error calling OpenAI via Netlify Function:', error);
       // Fallback to mock response in case of API failure
       console.warn('🔄 Using mock response due to API error');
       return this.getMockResponse(messages);
