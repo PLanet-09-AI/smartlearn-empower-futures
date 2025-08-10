@@ -61,7 +61,7 @@ class OpenAIService {
         body: JSON.stringify({
           model: this.model,
           messages,
-          max_tokens: 2000,
+          max_tokens: 1500,
           temperature: temperature,
           top_p: 1,
           frequency_penalty: 0,
