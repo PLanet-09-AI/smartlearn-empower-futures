@@ -2,3 +2,10 @@
 logs
 
 *.sw?
+# dotenv environment variables files
+.env
+.env.*
+.env.local
+.env.development.local
+.env.production.local
+.env.test.local
