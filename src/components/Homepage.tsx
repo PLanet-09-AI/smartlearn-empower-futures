@@ -4,6 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { BookOpen, Users, Award, TrendingUp, Star, PlayCircle, Mic, MicOff } from "lucide-react";
 import { useState, useEffect } from "react";
+import { db } from "@/lib/firebase";
+import { collection, getDocs } from "firebase/firestore";
 import { voiceRecognition } from "@/utils/voiceRecognition";
 import { toast } from "sonner";
 
@@ -14,6 +16,11 @@ interface HomepageProps {
 const Homepage = ({ onGetStarted }: HomepageProps) => {
   const [isListening, setIsListening] = useState(false);
   const [voiceCommand, setVoiceCommand] = useState("");
+  const [courses, setCourses] = useState([]);
+  const [testimonials, setTestimonials] = useState([]);
+  const [stats, setStats] = useState({ students: 0, courses: 0, rating: 0 });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   const handleVoiceCommand = () => {
     if (!voiceRecognition.isSupported()) {
@@ -61,9 +68,50 @@ const Homepage = ({ onGetStarted }: HomepageProps) => {
   };
 
   useEffect(() => {
+    // Cleanup for voice recognition
     return () => {
       voiceRecognition.stop();
     };
+  }, []);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        // Fetch courses
+        const coursesSnap = await getDocs(collection(db, "courses"));
+        const coursesData = coursesSnap.docs.map(doc => doc.data());
+        setCourses(coursesData);
+
+        // Fetch testimonials
+        const testimonialsSnap = await getDocs(collection(db, "testimonials"));
+        const testimonialsData = testimonialsSnap.docs.map(doc => doc.data());
+        setTestimonials(testimonialsData);
+
+        // Fetch stats (students, courses, rating)
+        // Option 1: stats collection
+        try {
+          const statsSnap = await getDocs(collection(db, "stats"));
+          if (!statsSnap.empty) {
+            const rawStats = statsSnap.docs[0].data();
+            setStats({
+              students: typeof rawStats.students === "number" ? rawStats.students : coursesData.reduce((a, c) => a + (c.students || 0), 0),
+              courses: typeof rawStats.courses === "number" ? rawStats.courses : coursesData.length,
+              rating: typeof rawStats.rating === "number" ? rawStats.rating : 4.9
+            });
+          } else {
+            setStats({ students: coursesData.reduce((a, c) => a + (c.students || 0), 0), courses: coursesData.length, rating: 4.9 });
+          }
+        } catch {
+          setStats({ students: coursesData.reduce((a, c) => a + (c.students || 0), 0), courses: coursesData.length, rating: 4.9 });
+        }
+        setError("");
+      } catch (err) {
+        setError("Failed to load data. Please try again later.");
+      }
+      setLoading(false);
+    };
+    fetchData();
   }, []);
 
   const features = [
@@ -89,29 +137,16 @@ const Homepage = ({ onGetStarted }: HomepageProps) => {
     }
   ];
 
-  const testimonials = [
-    {
-      name: "Sarah Johnson",
-      role: "Web Developer",
-      content: "SmartLearn transformed my career. The courses are practical and the instructors are amazing!",
-      rating: 5
-    },
-    {
-      name: "Michael Chen",
-      role: "Data Scientist",
-      content: "The AI-powered learning approach helped me understand complex concepts effortlessly.",
-      rating: 5
-    },
-    {
-      name: "Emily Rodriguez",
-      role: "Digital Marketer",
-      content: "I love the flexibility and the quality of content. Highly recommend to anyone looking to upskill.",
-      rating: 5
-    }
-  ];
+  // testimonials now come from Firestore
 
   return (
     <div className="min-h-screen">
+      {loading && (
+        <div className="py-20 text-center text-xl text-gray-600">Loading data...</div>
+      )}
+      {error && (
+        <div className="py-20 text-center text-red-600">{error}</div>
+      )}
       {/* Hero Section */}
       <section className="relative py-20 px-4 text-center bg-gradient-to-br from-blue-600 via-purple-600 to-green-600">
         <div className="absolute inset-0 bg-black opacity-20"></div>
@@ -162,15 +197,15 @@ const Homepage = ({ onGetStarted }: HomepageProps) => {
           <div className="flex justify-center space-x-8 text-sm opacity-80">
             <div className="flex items-center">
               <Star className="h-4 w-4 mr-1" />
-              4.9/5 Rating
+              {stats.rating}/5 Rating
             </div>
             <div className="flex items-center">
               <Users className="h-4 w-4 mr-1" />
-              10,000+ Students
+              {stats.students.toLocaleString()} Students
             </div>
             <div className="flex items-center">
               <Award className="h-4 w-4 mr-1" />
-              50+ Courses
+              {stats.courses} Courses
             </div>
           </div>
         </div>
@@ -180,7 +215,7 @@ const Homepage = ({ onGetStarted }: HomepageProps) => {
       <section id="features" className="py-20 px-4 bg-gray-50">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold mb-4">Why Choose SmartLearn?</h2>
+            <h2 className="text-3xl font-bold mb-4">Why Choose SgilaSkeem?</h2>
             <p className="text-gray-600 max-w-2xl mx-auto">
               We combine cutting-edge AI technology with expert instruction to create 
               the most effective learning experience possible.
@@ -214,29 +249,7 @@ const Homepage = ({ onGetStarted }: HomepageProps) => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {[
-              {
-                title: "Web Development Fundamentals",
-                category: "Programming",
-                level: "Beginner",
-                students: "1,234",
-                rating: "4.8"
-              },
-              {
-                title: "Data Science & Analytics",
-                category: "Data Science",
-                level: "Intermediate",
-                students: "856",
-                rating: "4.9"
-              },
-              {
-                title: "Digital Marketing Mastery",
-                category: "Marketing",
-                level: "Beginner",
-                students: "2,103",
-                rating: "4.7"
-              }
-            ].map((course, index) => (
+            {courses.map((course, index) => (
               <Card key={index} className="hover:shadow-lg transition-shadow">
                 <CardHeader>
                   <div className="aspect-video bg-gradient-to-r from-blue-400 to-purple-500 rounded-lg mb-4 flex items-center justify-center">
@@ -250,10 +263,10 @@ const Homepage = ({ onGetStarted }: HomepageProps) => {
                 </CardHeader>
                 <CardContent>
                   <div className="flex justify-between text-sm text-gray-600">
-                    <span>{course.students} students</span>
+                    <span>{course.students?.toLocaleString() || "-"} students</span>
                     <div className="flex items-center">
                       <Star className="h-4 w-4 text-yellow-500 mr-1" />
-                      {course.rating}
+                      {course.rating || "-"}
                     </div>
                   </div>
                 </CardContent>
@@ -276,7 +289,7 @@ const Homepage = ({ onGetStarted }: HomepageProps) => {
               <Card key={index} className="h-full">
                 <CardHeader>
                   <div className="flex items-center space-x-1 mb-2">
-                    {[...Array(testimonial.rating)].map((_, i) => (
+                    {[...Array(testimonial.rating || 5)].map((_, i) => (
                       <Star key={i} className="h-4 w-4 text-yellow-500 fill-current" />
                     ))}
                   </div>
@@ -301,7 +314,7 @@ const Homepage = ({ onGetStarted }: HomepageProps) => {
         <div className="max-w-4xl mx-auto">
           <h2 className="text-3xl font-bold mb-4">Ready to Start Your Learning Journey?</h2>
           <p className="text-xl mb-8 opacity-90">
-            Join SmartLearn today and unlock your potential with AI-powered education
+            Join SgilaSkeem today and unlock your potential with AI-powered education
           </p>
           <Button 
             onClick={onGetStarted}

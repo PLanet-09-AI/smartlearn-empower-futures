@@ -38,7 +38,7 @@ const LoginForm = () => {
         await signup(email, password, role);
         toast({
           title: "Account Created!",
-          description: "Welcome to SmartLearn! Your account has been created successfully.",
+          description: "Welcome to SgilaSkeem! Your account has been created successfully.",
         });
       } else {
         await login(email, password);
@@ -66,7 +66,7 @@ const LoginForm = () => {
             {isSignUp ? "Create Account" : "Welcome Back"}
           </h2>
           <p className="text-gray-600">
-            {isSignUp ? "Join SmartLearn to begin your digital learning journey" : "Login to begin your digital learning journey"}
+            {isSignUp ? "Join SgilaSkeem to begin your digital learning journey" : "Login to begin your digital learning journey"}
           </p>
         </div>
 
@@ -77,7 +77,7 @@ const LoginForm = () => {
             </CardTitle>
             <CardDescription className="text-center">
               {isSignUp 
-                ? "Create your SmartLearn account" 
+                ? "Create your SgilaSkeem account" 
                 : "Enter your credentials to access your learning dashboard"
               }
             </CardDescription>
@@ -159,7 +159,7 @@ const LoginForm = () => {
                 className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors"
                 disabled={loading}
               >
-                {loading ? "Please wait..." : (isSignUp ? "Create Account" : "Sign In to SmartLearn")}
+                {loading ? "Please wait..." : (isSignUp ? "Create Account" : "Sign In to SgilaSkeem")}
               </Button>
             </form>
           </CardContent>
@@ -167,7 +167,7 @@ const LoginForm = () => {
 
         <div className="text-center">
           <p className="text-sm text-gray-600">
-            {isSignUp ? "Already have an account?" : "New to SmartLearn?"}{" "}
+            {isSignUp ? "Already have an account?" : "New to SgilaSkeem?"}{" "}
             <button 
               onClick={() => setIsSignUp(!isSignUp)}
               className="text-blue-600 hover:text-blue-500 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded"
