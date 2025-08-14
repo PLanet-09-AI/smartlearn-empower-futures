@@ -36,12 +36,7 @@ class OpenAIService {
    */
   async generateText(messages: Message[], temperature: number = 0.7): Promise<string> {
     try {
-      // Use mock response for testing if needed
-      if (import.meta.env.VITE_USE_MOCK_RESPONSES === 'true') {
-        console.warn('🔄 Using mock response for development (forced).');
-        return this.getMockResponse(messages);
-      }
-
+    
       // Call Netlify Function instead of OpenAI directly
       const response = await fetch('/.netlify/functions/openai-proxy', {
         method: 'POST',

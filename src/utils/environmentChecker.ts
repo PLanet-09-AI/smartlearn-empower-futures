@@ -3,9 +3,11 @@
  * Validates OpenAI and other environment variables
  */
 
+
 interface EnvironmentConfig {
-  openAI: {
+  ollama: {
     isConfigured: boolean;
+    endpoint: string;
     model: string;
   };
   firebase: {
@@ -18,9 +20,10 @@ interface EnvironmentConfig {
 
 export function validateEnvironment(): EnvironmentConfig {
   const config: EnvironmentConfig = {
-    openAI: {
-      isConfigured: true,
-      model: import.meta.env.VITE_OPENAI_MODEL || 'gpt-4o-mini',
+    ollama: {
+      endpoint: import.meta.env.VITE_OLLAMA_URL || 'http://localhost:11434/api/generate',
+      model: import.meta.env.VITE_OLLAMA_MODEL || 'gpt-oss:20b',
+      isConfigured: false,
     },
     firebase: {
       isConfigured: false,
@@ -30,7 +33,8 @@ export function validateEnvironment(): EnvironmentConfig {
     }
   };
 
-  // No API key check needed for OpenAI in frontend
+  // Validate Ollama (basic check: endpoint and model must be set)
+  config.ollama.isConfigured = !!(config.ollama.endpoint && config.ollama.model);
 
   // Validate Firebase (basic check)
   config.firebase.isConfigured = !!(
@@ -44,26 +48,27 @@ export function validateEnvironment(): EnvironmentConfig {
 
 export function logEnvironmentStatus(): void {
   const config = validateEnvironment();
-  
+
   console.log('🔧 Environment Configuration Status:');
   console.log('=====================================');
-  
-  // OpenAI Status
-  if (config.openAI.isConfigured) {
-    console.log('✅ OpenAI: Configured');
-    console.log(`   � Model: ${config.openAI.model}`);
+
+  // Ollama Status
+  if (config.ollama.isConfigured) {
+    console.log('✅ Ollama: Configured');
+    console.log(`   🌐 Endpoint: ${config.ollama.endpoint}`);
+    console.log(`   🤖 Model: ${config.ollama.model}`);
   } else {
-    console.log('❌ OpenAI: Not Configured');
-    console.log('   � Add your OpenAI API key to .env.development.local');
+    console.log('❌ Ollama: Not Configured');
+    console.log('   🌐 Set VITE_OLLAMA_URL and VITE_OLLAMA_MODEL in your environment');
   }
-  
+
   // Firebase Status
   if (config.firebase.isConfigured) {
     console.log('✅ Firebase: Configured');
   } else {
     console.log('❌ Firebase: Not Configured');
   }
-  
+
   console.log('=====================================');
 }
 

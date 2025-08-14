@@ -14,7 +14,7 @@ import {
   QuestionAnalytics,
   UserQuizResult
 } from '@/types';
-import { openAIService } from './openAIService';
+import { azureOpenAIService } from './azureOpenAI';
 import { v4 as uuidv4 } from 'uuid';
 
 export class QuizService {
@@ -73,7 +73,7 @@ export class QuizService {
       
       const generatedAt = new Date();
       
-      // Generate quiz questions using OpenAI directly from course content
+  // Generate quiz questions using Ollama (local LLM) from course content
       const defaultQuizPrompt = `
 I need you to create a quiz based on the following course content:
 
@@ -99,12 +99,12 @@ Make sure questions are varied and cover different sections of the content. The 
                       .replace("{courseTitle}", courseData.title)
                       .replace("{courseDescription}", courseData.description || '')
                       .replace("{numQuestions}", numQuestions.toString())
-        : defaultQuizPrompt;
+        : defaultQuizPrompt; 
 
-      const questionsJson = await openAIService.generateText([
+  const questionsJson = await azureOpenAIService.generateText([
         { role: "system", content: "You are a quiz generator specializing in accountancy education." },
         { role: "user", content: finalPrompt }
-      ], temperature);
+      ]);
       
       // 3) Parse and clean up the JSON response
       const questionsData = this.deserializeQuestions(questionsJson);
@@ -383,8 +383,8 @@ Make sure questions are varied and cover different sections of the content. The 
   }
 
   /**
-   * Parse and clean the JSON response from Azure OpenAI
-   * @param rawJson The raw JSON string from the AI
+  * Parse and clean the JSON response from Ollama
+  * @param rawJson The raw JSON string from the AI
    */
   private deserializeQuestions(rawJson: string): Array<{
     id: number;
