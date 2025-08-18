@@ -1,5 +1,4 @@
-import { doc, setDoc, getDoc, updateDoc, arrayUnion, arrayRemove } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { db, serverTimestamp } from "@/lib/database";
 
 export interface UserProgress {
   userId: string;
@@ -13,108 +12,164 @@ export const progressService = {
   // Save user's progress for a specific course content item
   async markContentComplete(userId: string, courseId: string, contentId: string): Promise<void> {
     try {
-      // Create a reference to the user's progress document
-      const progressRef = doc(db, "userProgress", `${userId}_${courseId}`);
+      // Create a unique progress ID
+      const progressId = `${userId}_${courseId}`;
       
       // Check if the progress document exists
-      const progressDoc = await getDoc(progressRef);
+      const existingProgress = await db.get("userProgress", progressId);
       
-      if (progressDoc.exists()) {
+      if (existingProgress) {
         // Update existing progress
-        const currentProgress = progressDoc.data() as UserProgress;
+        const currentProgress = existingProgress as UserProgress;
         const completedContent = currentProgress.completedContent || [];
         
         // Only add if not already marked as complete
         if (!completedContent.includes(contentId)) {
           // Calculate new completion percentage
-          const course = await getDoc(doc(db, "courses", courseId));
+          const course = await db.get("courses", courseId);
           // Filter out quiz items from content when calculating total
-          const totalContentCount = course.data()?.content?.filter(
-            (item: any) => item.type !== 'quiz'
-          )?.length || 1;
-          const newCompletionPercentage = Math.min(
-            ((completedContent.length + 1) / totalContentCount) * 100,
-            100
-          );
-          
-          // Update the progress document
-          await updateDoc(progressRef, {
-            completedContent: arrayUnion(contentId),
-            lastAccessed: new Date(),
+          const courseContent = course?.content || [];
+          const totalContentItems = courseContent.length;
+          const newCompletedCount = completedContent.length + 1;
+          const newCompletionPercentage = totalContentItems > 0 
+            ? Math.round((newCompletedCount / totalContentItems) * 100) 
+            : 0;
+
+          const updatedProgress = {
+            ...currentProgress,
+            completedContent: [...completedContent, contentId],
+            lastAccessed: serverTimestamp(),
             completionPercentage: newCompletionPercentage
-          });
+          };
+
+          await db.update("userProgress", updatedProgress);
+          console.log(`Progress updated for user ${userId} in course ${courseId}`);
         }
       } else {
         // Create new progress document
-        const course = await getDoc(doc(db, "courses", courseId));
-        // Filter out quiz items from content when calculating total
-        const totalContentCount = course.data()?.content?.filter(
-          (item: any) => item.type !== 'quiz'
-        )?.length || 1;
-        
+        const course = await db.get("courses", courseId);
+        const courseContent = course?.content || [];
+        const totalContentItems = courseContent.length;
+        const completionPercentage = totalContentItems > 0 
+          ? Math.round((1 / totalContentItems) * 100) 
+          : 0;
+
         const newProgress: UserProgress = {
           userId,
           courseId,
           completedContent: [contentId],
-          lastAccessed: new Date(),
-          completionPercentage: (1 / totalContentCount) * 100
+          lastAccessed: serverTimestamp(),
+          completionPercentage
         };
-        
-        await setDoc(progressRef, newProgress);
-      }
-      
-    } catch (error) {
-      console.error("Error updating progress:", error);
-      throw error;
-    }
-  },
 
-  // Mark content as incomplete (if user wants to revisit)
-  async markContentIncomplete(userId: string, courseId: string, contentId: string): Promise<void> {
-    try {
-      const progressRef = doc(db, "userProgress", `${userId}_${courseId}`);
-      const progressDoc = await getDoc(progressRef);
-      
-      if (progressDoc.exists()) {
-        const currentProgress = progressDoc.data() as UserProgress;
-        
-        // Calculate new completion percentage
-        const course = await getDoc(doc(db, "courses", courseId));
-        // Filter out quiz items from content when calculating total
-        const totalContentCount = course.data()?.content?.filter(
-          (item: any) => item.type !== 'quiz'
-        )?.length || 1;
-        const newCompletionPercentage = Math.max(
-          ((currentProgress.completedContent.length - 1) / totalContentCount) * 100,
-          0
-        );
-        
-        await updateDoc(progressRef, {
-          completedContent: arrayRemove(contentId),
-          lastAccessed: new Date(),
-          completionPercentage: newCompletionPercentage
-        });
+        await db.add("userProgress", { id: progressId, ...newProgress });
+        console.log(`New progress created for user ${userId} in course ${courseId}`);
       }
     } catch (error) {
-      console.error("Error updating progress:", error);
-      throw error;
+      console.error("Error marking content as complete:", error);
+      throw new Error("Failed to mark content as complete");
     }
   },
 
   // Get user's progress for a specific course
   async getUserProgress(userId: string, courseId: string): Promise<UserProgress | null> {
     try {
-      const progressRef = doc(db, "userProgress", `${userId}_${courseId}`);
-      const progressDoc = await getDoc(progressRef);
+      const progressId = `${userId}_${courseId}`;
+      const progress = await db.get("userProgress", progressId);
       
-      if (progressDoc.exists()) {
-        return progressDoc.data() as UserProgress;
-      }
-      
-      return null;
+      return progress ? progress as UserProgress : null;
     } catch (error) {
-      console.error("Error getting progress:", error);
-      throw error;
+      console.error("Error getting user progress:", error);
+      return null;
+    }
+  },
+
+  // Mark content as incomplete (uncheck)
+  async markContentIncomplete(userId: string, courseId: string, contentId: string): Promise<void> {
+    try {
+      const progressId = `${userId}_${courseId}`;
+      const existingProgress = await db.get("userProgress", progressId);
+      
+      if (existingProgress) {
+        const currentProgress = existingProgress as UserProgress;
+        const completedContent = currentProgress.completedContent || [];
+        
+        // Remove the content ID if it exists
+        const updatedCompletedContent = completedContent.filter(id => id !== contentId);
+        
+        // Recalculate completion percentage
+        const course = await db.get("courses", courseId);
+        const courseContent = course?.content || [];
+        const totalContentItems = courseContent.length;
+        const completionPercentage = totalContentItems > 0 
+          ? Math.round((updatedCompletedContent.length / totalContentItems) * 100) 
+          : 0;
+
+        const updatedProgress = {
+          ...currentProgress,
+          completedContent: updatedCompletedContent,
+          lastAccessed: serverTimestamp(),
+          completionPercentage
+        };
+
+        await db.update("userProgress", updatedProgress);
+        console.log(`Content ${contentId} marked as incomplete for user ${userId}`);
+      }
+    } catch (error) {
+      console.error("Error marking content as incomplete:", error);
+      throw new Error("Failed to mark content as incomplete");
+    }
+  },
+
+  // Get all progress for a user across all courses
+  async getAllUserProgress(userId: string): Promise<UserProgress[]> {
+    try {
+      const allProgress = await db.query("userProgress", 
+        (progress: any) => progress.userId === userId
+      );
+      
+      return allProgress;
+    } catch (error) {
+      console.error("Error getting all user progress:", error);
+      throw new Error("Failed to get user progress");
+    }
+  },
+
+  // Check if specific content is completed
+  async isContentCompleted(userId: string, courseId: string, contentId: string): Promise<boolean> {
+    try {
+      const progress = await this.getUserProgress(userId, courseId);
+      
+      if (!progress) return false;
+      
+      return progress.completedContent.includes(contentId);
+    } catch (error) {
+      console.error("Error checking if content is completed:", error);
+      return false;
+    }
+  },
+
+  // Get completion percentage for a course
+  async getCourseCompletionPercentage(userId: string, courseId: string): Promise<number> {
+    try {
+      const progress = await this.getUserProgress(userId, courseId);
+      
+      return progress ? progress.completionPercentage : 0;
+    } catch (error) {
+      console.error("Error getting course completion percentage:", error);
+      return 0;
+    }
+  },
+
+  // Reset course progress
+  async resetCourseProgress(userId: string, courseId: string): Promise<void> {
+    try {
+      const progressId = `${userId}_${courseId}`;
+      await db.delete("userProgress", progressId);
+      console.log(`Progress reset for user ${userId} in course ${courseId}`);
+    } catch (error) {
+      console.error("Error resetting course progress:", error);
+      throw new Error("Failed to reset course progress");
     }
   }
 };

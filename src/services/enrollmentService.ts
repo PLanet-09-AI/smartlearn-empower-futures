@@ -1,15 +1,4 @@
-import { 
-  collection, 
-  addDoc, 
-  getDocs, 
-  query, 
-  where, 
-  doc, 
-  deleteDoc,
-  getDoc,
-  serverTimestamp
-} from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { db, serverTimestamp } from '@/lib/database';
 
 export interface CourseEnrollment {
   userId: string;
@@ -30,78 +19,43 @@ export class EnrollmentService {
         return existingEnrollment; // Return existing enrollment ID
       }
 
-      // Check if the course exists
-      const courseRef = doc(db, 'courses', courseId);
-      const courseDoc = await getDoc(courseRef);
-      if (!courseDoc.exists()) {
-        throw new Error('Course not found');
-      }
-
-      // Create the enrollment
-      const enrollmentData: Omit<CourseEnrollment, 'id'> = {
+      // Create new enrollment
+      const enrollmentData = {
         userId,
         courseId,
-        enrollmentDate: new Date(),
-        status: 'active'
+        enrollmentDate: serverTimestamp(),
+        status: 'active' as const
       };
 
-      // Add enrollment document to Firebase
-      const docRef = await addDoc(
-        collection(db, this.enrollmentsCollection), 
-        {
-          ...enrollmentData,
-          enrollmentDate: serverTimestamp(),
-        }
-      );
-
-      console.log(`User ${userId} enrolled in course ${courseId} successfully`);
-      return docRef.id;
+      const enrollmentId = await db.add(this.enrollmentsCollection, enrollmentData);
+      console.log('User enrolled successfully:', { userId, courseId, enrollmentId });
+      return enrollmentId;
     } catch (error) {
-      console.error('Error enrolling user in course:', error);
-      throw new Error('Failed to enroll in course');
+      console.error('Error enrolling user:', error);
+      throw new Error('Failed to enroll user in course');
     }
   }
 
-  // Check if a user is already enrolled in a course
+  // Check if enrollment exists for user and course
   async checkEnrollmentExists(userId: string, courseId: string): Promise<string | null> {
     try {
-      const enrollmentsRef = collection(db, this.enrollmentsCollection);
-      const q = query(
-        enrollmentsRef, 
-        where('userId', '==', userId),
-        where('courseId', '==', courseId)
+      const enrollments = await db.query(this.enrollmentsCollection, 
+        (enrollment: any) => enrollment.userId === userId && enrollment.courseId === courseId
       );
-      const querySnapshot = await getDocs(q);
       
-      if (!querySnapshot.empty) {
-        // User is already enrolled
-        return querySnapshot.docs[0].id;
-      }
-      
-      return null;
+      return enrollments.length > 0 ? enrollments[0].id : null;
     } catch (error) {
       console.error('Error checking enrollment:', error);
-      throw new Error('Failed to check enrollment status');
+      return null;
     }
   }
 
-  // Get all courses a user is enrolled in
+  // Get all enrollments for a user
   async getUserEnrollments(userId: string): Promise<CourseEnrollment[]> {
     try {
-      const enrollmentsRef = collection(db, this.enrollmentsCollection);
-      const q = query(enrollmentsRef, where('userId', '==', userId));
-      const querySnapshot = await getDocs(q);
-      
-      const enrollments: CourseEnrollment[] = [];
-      querySnapshot.forEach(doc => {
-        const data = doc.data();
-        enrollments.push({
-          userId: data.userId,
-          courseId: data.courseId,
-          enrollmentDate: data.enrollmentDate?.toDate() || new Date(),
-          status: data.status || 'active'
-        });
-      });
+      const enrollments = await db.query(this.enrollmentsCollection,
+        (enrollment: any) => enrollment.userId === userId
+      );
       
       return enrollments;
     } catch (error) {
@@ -110,31 +64,110 @@ export class EnrollmentService {
     }
   }
 
-  // Unenroll a user from a course
-  async unenrollUserFromCourse(userId: string, courseId: string): Promise<void> {
+  // Get all enrollments for a course
+  async getCourseEnrollments(courseId: string): Promise<CourseEnrollment[]> {
     try {
-      const enrollmentsRef = collection(db, this.enrollmentsCollection);
-      const q = query(
-        enrollmentsRef, 
-        where('userId', '==', userId),
-        where('courseId', '==', courseId)
+      const enrollments = await db.query(this.enrollmentsCollection,
+        (enrollment: any) => enrollment.courseId === courseId
       );
-      const querySnapshot = await getDocs(q);
       
-      if (querySnapshot.empty) {
+      return enrollments;
+    } catch (error) {
+      console.error('Error getting course enrollments:', error);
+      throw new Error('Failed to get course enrollments');
+    }
+  }
+
+  // Get enrollment by ID
+  async getEnrollment(enrollmentId: string): Promise<CourseEnrollment | null> {
+    try {
+      const enrollment = await db.get(this.enrollmentsCollection, enrollmentId);
+      return enrollment || null;
+    } catch (error) {
+      console.error('Error getting enrollment:', error);
+      throw new Error('Failed to get enrollment');
+    }
+  }
+
+  // Update enrollment status
+  async updateEnrollmentStatus(enrollmentId: string, status: 'active' | 'completed' | 'dropped'): Promise<void> {
+    try {
+      const enrollment = await db.get(this.enrollmentsCollection, enrollmentId);
+      
+      if (!enrollment) {
         throw new Error('Enrollment not found');
       }
-      
-      // Get the enrollment document ID
-      const enrollmentId = querySnapshot.docs[0].id;
-      
-      // Delete the enrollment document
-      await deleteDoc(doc(db, this.enrollmentsCollection, enrollmentId));
-      
-      console.log(`User ${userId} unenrolled from course ${courseId} successfully`);
+
+      const updatedEnrollment = {
+        ...enrollment,
+        status
+      };
+
+      await db.update(this.enrollmentsCollection, updatedEnrollment);
+      console.log('Enrollment status updated:', { enrollmentId, status });
     } catch (error) {
-      console.error('Error unenrolling user from course:', error);
-      throw new Error('Failed to unenroll from course');
+      console.error('Error updating enrollment status:', error);
+      throw new Error('Failed to update enrollment status');
+    }
+  }
+
+  // Remove enrollment (drop course)
+  async removeEnrollment(enrollmentId: string): Promise<void> {
+    try {
+      await db.delete(this.enrollmentsCollection, enrollmentId);
+      console.log('Enrollment removed:', enrollmentId);
+    } catch (error) {
+      console.error('Error removing enrollment:', error);
+      throw new Error('Failed to remove enrollment');
+    }
+  }
+
+  // Get enrollment statistics
+  async getEnrollmentStats(): Promise<{
+    totalEnrollments: number;
+    activeEnrollments: number;
+    completedEnrollments: number;
+    droppedEnrollments: number;
+  }> {
+    try {
+      const allEnrollments = await db.getAll(this.enrollmentsCollection);
+      
+      const stats = {
+        totalEnrollments: allEnrollments.length,
+        activeEnrollments: allEnrollments.filter((e: any) => e.status === 'active').length,
+        completedEnrollments: allEnrollments.filter((e: any) => e.status === 'completed').length,
+        droppedEnrollments: allEnrollments.filter((e: any) => e.status === 'dropped').length
+      };
+      
+      return stats;
+    } catch (error) {
+      console.error('Error getting enrollment stats:', error);
+      throw new Error('Failed to get enrollment statistics');
+    }
+  }
+
+  // Check if user is enrolled in course
+  async isUserEnrolled(userId: string, courseId: string): Promise<boolean> {
+    try {
+      const enrollmentId = await this.checkEnrollmentExists(userId, courseId);
+      return enrollmentId !== null;
+    } catch (error) {
+      console.error('Error checking if user is enrolled:', error);
+      return false;
+    }
+  }
+
+  // Get user's completed courses
+  async getUserCompletedCourses(userId: string): Promise<string[]> {
+    try {
+      const enrollments = await db.query(this.enrollmentsCollection,
+        (enrollment: any) => enrollment.userId === userId && enrollment.status === 'completed'
+      );
+      
+      return enrollments.map((enrollment: any) => enrollment.courseId);
+    } catch (error) {
+      console.error('Error getting user completed courses:', error);
+      throw new Error('Failed to get user completed courses');
     }
   }
 }

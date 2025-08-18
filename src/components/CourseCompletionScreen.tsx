@@ -8,8 +8,7 @@ import { courseService } from '@/services/courseService';
 import { enrollmentService } from '@/services/enrollmentService';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { doc, setDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { progressService } from '@/services/progressService';
 import CourseRatingModal from './CourseRatingModal';
 import { StarRating } from '@/components/ui/star-rating';
 
@@ -37,15 +36,16 @@ const CourseCompletionScreen: React.FC<CourseCompletionScreenProps> = ({
       if (!currentUser || !course) return;
       
       try {
-        // Update progress to 100%
-        const progressRef = doc(db, "userProgress", `${currentUser.uid}_${course.firebaseId || course.id}`);
-        await setDoc(progressRef, {
-          userId: currentUser.uid,
-          courseId: course.firebaseId || course.id,
-          completedContent: course.content?.map(c => c.id) || [],
-          lastAccessed: new Date(),
-          completionPercentage: 100
-        }, { merge: true });
+        // Mark all course content as complete
+        if (course.content && course.content.length > 0) {
+          for (const content of course.content) {
+            await progressService.markContentComplete(
+              currentUser.id,
+              course.id,
+              content.id
+            );
+          }
+        }
         
         console.log(`Course ${course.title} marked as complete`);
       } catch (error) {
@@ -61,7 +61,7 @@ const CourseCompletionScreen: React.FC<CourseCompletionScreenProps> = ({
       try {
         setLoading(true);
         // Get all courses to find the next one in sequence
-        const allCourses = await courseService.getCourses('learner');
+        const allCourses = await courseService.getCourses({});
         
         // Extract module number from course title
         const getModuleNumber = (title: string) => {
@@ -125,12 +125,12 @@ const CourseCompletionScreen: React.FC<CourseCompletionScreenProps> = ({
       
       // Check if user is already enrolled
       const enrollmentExists = await enrollmentService.checkEnrollmentExists(
-        currentUser.uid,
+        currentUser.id,
         courseId
       );
       
       if (!enrollmentExists) {
-        await enrollmentService.enrollUserInCourse(currentUser.uid, courseId);
+        await enrollmentService.enrollUserInCourse(currentUser.id, courseId);
         toast.success('Successfully enrolled in course!');
       } else {
         toast.info('You are already enrolled in this course');

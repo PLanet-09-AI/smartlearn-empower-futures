@@ -89,7 +89,6 @@ const UserProgressDashboard: React.FC = () => {
               </div>
               <Progress 
                 value={overallProgress} 
-                className="h-3 bg-blue-100" 
                 className={`h-3 ${overallProgress > 80 ? 'bg-green-600' : 'bg-blue-600'}`}
               />
               

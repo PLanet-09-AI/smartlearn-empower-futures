@@ -4,8 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { BookOpen, Users, Award, TrendingUp, Star, PlayCircle, Mic, MicOff } from "lucide-react";
 import { useState, useEffect } from "react";
-import { db } from "@/lib/firebase";
-import { collection, getDocs } from "firebase/firestore";
+import { db } from "@/lib/database";
 import { voiceRecognition } from "@/utils/voiceRecognition";
 import { toast } from "sonner";
 
@@ -79,21 +78,19 @@ const Homepage = ({ onGetStarted }: HomepageProps) => {
       setLoading(true);
       try {
         // Fetch courses
-        const coursesSnap = await getDocs(collection(db, "courses"));
-        const coursesData = coursesSnap.docs.map(doc => doc.data());
+        const coursesData = await db.getAll("courses");
         setCourses(coursesData);
 
         // Fetch testimonials
-        const testimonialsSnap = await getDocs(collection(db, "testimonials"));
-        const testimonialsData = testimonialsSnap.docs.map(doc => doc.data());
+        const testimonialsData = await db.getAll("testimonials");
         setTestimonials(testimonialsData);
 
         // Fetch stats (students, courses, rating)
         // Option 1: stats collection
         try {
-          const statsSnap = await getDocs(collection(db, "stats"));
-          if (!statsSnap.empty) {
-            const rawStats = statsSnap.docs[0].data();
+          const statsData = await db.getAll("stats");
+          if (statsData.length > 0) {
+            const rawStats = statsData[0];
             setStats({
               students: typeof rawStats.students === "number" ? rawStats.students : coursesData.reduce((a, c) => a + (c.students || 0), 0),
               courses: typeof rawStats.courses === "number" ? rawStats.courses : coursesData.length,

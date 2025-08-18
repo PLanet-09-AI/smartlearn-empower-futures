@@ -1,17 +1,6 @@
-import { 
-  collection, 
-  doc, 
-  getDoc, 
-  getDocs, 
-  addDoc, 
-  query, 
-  where, 
-  updateDoc, 
-  serverTimestamp, 
-  deleteDoc 
-} from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { db, serverTimestamp } from '@/lib/database';
 import { CourseRating } from '@/types';
+import { v4 as uuidv4 } from 'uuid';
 
 export class RatingService {
   private ratingsCollection = 'courseRatings';
@@ -29,27 +18,27 @@ export class RatingService {
       const existingRating = await this.getUserRating(userId, courseId);
       
       if (existingRating) {
-        // Update the existing rating
-        await this.updateRating(existingRating.id!, rating, comment);
-        return existingRating.id!;
+        // Update existing rating
+        return await this.updateRating(existingRating.id!, rating, comment);
       }
 
-      // Create a new rating
+      // Create new rating
       const ratingData: CourseRating = {
+        id: uuidv4(),
         userId,
         courseId,
         rating,
-        comment: comment || '',
-        createdAt: serverTimestamp(),
+        comment,
+        createdAt: serverTimestamp()
       };
 
-      // Save the rating to Firebase
-      const docRef = await addDoc(collection(db, this.ratingsCollection), ratingData);
+      const ratingId = await db.add(this.ratingsCollection, ratingData);
       
-      // Update the course's average rating
-      await this.updateCourseAverageRating(courseId);
+      // Update course rating statistics
+      await this.updateCourseRatingStats(courseId);
       
-      return docRef.id;
+      console.log('Rating added successfully:', ratingId);
+      return ratingId;
     } catch (error) {
       console.error('Error adding rating:', error);
       throw new Error('Failed to add rating');
@@ -57,25 +46,32 @@ export class RatingService {
   }
 
   // Update an existing rating
-  async updateRating(ratingId: string, rating: number, comment?: string): Promise<void> {
+  async updateRating(
+    ratingId: string,
+    rating: number,
+    comment?: string
+  ): Promise<string> {
     try {
-      const ratingRef = doc(db, this.ratingsCollection, ratingId);
-      const ratingDoc = await getDoc(ratingRef);
+      const existingRating = await db.get(this.ratingsCollection, ratingId);
       
-      if (!ratingDoc.exists()) {
+      if (!existingRating) {
         throw new Error('Rating not found');
       }
-      
-      const ratingData = ratingDoc.data() as CourseRating;
-      
-      // Update the rating
-      await updateDoc(ratingRef, {
+
+      const updatedRating = {
+        ...existingRating,
         rating,
-        comment: comment || ratingData.comment || '',
-      });
+        comment,
+        updatedAt: serverTimestamp()
+      };
+
+      await db.update(this.ratingsCollection, updatedRating);
       
-      // Update the course's average rating
-      await this.updateCourseAverageRating(ratingData.courseId);
+      // Update course rating statistics
+      await this.updateCourseRatingStats(existingRating.courseId);
+      
+      console.log('Rating updated successfully:', ratingId);
+      return ratingId;
     } catch (error) {
       console.error('Error updating rating:', error);
       throw new Error('Failed to update rating');
@@ -85,117 +81,212 @@ export class RatingService {
   // Get a user's rating for a specific course
   async getUserRating(userId: string, courseId: string): Promise<CourseRating | null> {
     try {
-      const ratingsRef = collection(db, this.ratingsCollection);
-      const q = query(
-        ratingsRef,
-        where('userId', '==', userId),
-        where('courseId', '==', courseId)
+      const ratings = await db.query(this.ratingsCollection, 
+        (rating: any) => rating.userId === userId && rating.courseId === courseId
       );
       
-      const querySnapshot = await getDocs(q);
-      
-      if (querySnapshot.empty) {
-        return null;
-      }
-      
-      const ratingDoc = querySnapshot.docs[0];
-      return {
-        id: ratingDoc.id,
-        ...ratingDoc.data() as CourseRating
-      };
+      return ratings.length > 0 ? ratings[0] : null;
     } catch (error) {
       console.error('Error getting user rating:', error);
-      throw new Error('Failed to get user rating');
+      return null;
     }
   }
 
   // Get all ratings for a course
-  async getCourseRatings(courseId: string): Promise<CourseRating[]> {
+  async getCourseRatings(courseId: string, limit?: number): Promise<CourseRating[]> {
     try {
-      const ratingsRef = collection(db, this.ratingsCollection);
-      const q = query(
-        ratingsRef,
-        where('courseId', '==', courseId)
+      const ratings = await db.query(this.ratingsCollection,
+        (rating: any) => rating.courseId === courseId
       );
       
-      const querySnapshot = await getDocs(q);
-      const ratings: CourseRating[] = [];
+      // Sort by creation date (newest first)
+      const sortedRatings = ratings.sort((a: any, b: any) => 
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
       
-      querySnapshot.forEach((doc) => {
-        ratings.push({
-          id: doc.id,
-          ...doc.data() as CourseRating
-        });
-      });
-      
-      return ratings;
+      return limit ? sortedRatings.slice(0, limit) : sortedRatings;
     } catch (error) {
       console.error('Error getting course ratings:', error);
       throw new Error('Failed to get course ratings');
     }
   }
 
-  // Calculate and update the average rating for a course
-  async updateCourseAverageRating(courseId: string): Promise<number> {
+  // Get all ratings by a user
+  async getUserRatings(userId: string): Promise<CourseRating[]> {
     try {
-      // Get all ratings for the course
-      const ratings = await this.getCourseRatings(courseId);
-      const ratingCount = ratings.length;
+      const ratings = await db.query(this.ratingsCollection,
+        (rating: any) => rating.userId === userId
+      );
       
-      if (ratingCount === 0) {
-        // No ratings, set default values
-        await this.setCourseRatingData(courseId, 0, 0);
-        return 0;
-      }
-      
-      // Calculate average rating
-      const totalRating = ratings.reduce((sum, rating) => sum + rating.rating, 0);
-      const averageRating = totalRating / ratingCount;
-      const roundedRating = Math.round(averageRating * 10) / 10; // Round to 1 decimal place
-      
-      // Update the course's rating field and rating count
-      await this.setCourseRatingData(courseId, roundedRating, ratingCount);
-      
-      return roundedRating;
+      return ratings.sort((a: any, b: any) => 
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
     } catch (error) {
-      console.error('Error updating course average rating:', error);
-      throw new Error('Failed to update course average rating');
-    }
-  }
-
-  // Set a course's rating value and count
-  private async setCourseRatingData(courseId: string, rating: number, ratingCount: number): Promise<void> {
-    try {
-      const courseRef = doc(db, this.coursesCollection, courseId);
-      await updateDoc(courseRef, { rating, ratingCount });
-    } catch (error) {
-      console.error('Error setting course rating data:', error);
-      throw new Error('Failed to set course rating data');
+      console.error('Error getting user ratings:', error);
+      throw new Error('Failed to get user ratings');
     }
   }
 
   // Delete a rating
   async deleteRating(ratingId: string): Promise<void> {
     try {
-      // Get the rating to get the courseId
-      const ratingRef = doc(db, this.ratingsCollection, ratingId);
-      const ratingDoc = await getDoc(ratingRef);
+      const rating = await db.get(this.ratingsCollection, ratingId);
       
-      if (!ratingDoc.exists()) {
+      if (!rating) {
         throw new Error('Rating not found');
       }
+
+      await db.delete(this.ratingsCollection, ratingId);
       
-      const ratingData = ratingDoc.data() as CourseRating;
-      const courseId = ratingData.courseId;
+      // Update course rating statistics
+      await this.updateCourseRatingStats(rating.courseId);
       
-      // Delete the rating
-      await deleteDoc(ratingRef);
-      
-      // Update the course's average rating
-      await this.updateCourseAverageRating(courseId);
+      console.log('Rating deleted successfully:', ratingId);
     } catch (error) {
       console.error('Error deleting rating:', error);
       throw new Error('Failed to delete rating');
+    }
+  }
+
+  // Calculate and update course rating statistics
+  private async updateCourseRatingStats(courseId: string): Promise<void> {
+    try {
+      const ratings = await this.getCourseRatings(courseId);
+      
+      if (ratings.length === 0) {
+        // No ratings, set to default values
+        const course = await db.get(this.coursesCollection, courseId);
+        if (course) {
+          const updatedCourse = {
+            ...course,
+            rating: 0,
+            ratingCount: 0
+          };
+          await db.update(this.coursesCollection, updatedCourse);
+        }
+        return;
+      }
+
+      // Calculate average rating
+      const totalRating = ratings.reduce((sum, rating) => sum + rating.rating, 0);
+      const averageRating = totalRating / ratings.length;
+      const roundedRating = Math.round(averageRating * 10) / 10; // Round to 1 decimal place
+
+      // Update course with new rating statistics
+      const course = await db.get(this.coursesCollection, courseId);
+      if (course) {
+        const updatedCourse = {
+          ...course,
+          rating: roundedRating,
+          ratingCount: ratings.length
+        };
+        await db.update(this.coursesCollection, updatedCourse);
+      }
+
+      console.log(`Updated course ${courseId} rating stats:`, {
+        averageRating: roundedRating,
+        totalRatings: ratings.length
+      });
+    } catch (error) {
+      console.error('Error updating course rating stats:', error);
+    }
+  }
+
+  // Get rating statistics for a course
+  async getCourseRatingStats(courseId: string): Promise<{
+    averageRating: number;
+    totalRatings: number;
+    ratingDistribution: { [key: number]: number };
+  }> {
+    try {
+      const ratings = await this.getCourseRatings(courseId);
+      
+      if (ratings.length === 0) {
+        return {
+          averageRating: 0,
+          totalRatings: 0,
+          ratingDistribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }
+        };
+      }
+
+      // Calculate average rating
+      const totalRating = ratings.reduce((sum, rating) => sum + rating.rating, 0);
+      const averageRating = Math.round((totalRating / ratings.length) * 10) / 10;
+
+      // Calculate rating distribution
+      const distribution: { [key: number]: number } = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+      ratings.forEach(rating => {
+        if (rating.rating >= 1 && rating.rating <= 5) {
+          distribution[Math.round(rating.rating)]++;
+        }
+      });
+
+      return {
+        averageRating,
+        totalRatings: ratings.length,
+        ratingDistribution: distribution
+      };
+    } catch (error) {
+      console.error('Error getting course rating stats:', error);
+      throw new Error('Failed to get course rating statistics');
+    }
+  }
+
+  // Check if a user can rate a course (e.g., must be enrolled)
+  async canUserRate(userId: string, courseId: string): Promise<boolean> {
+    try {
+      // Check if user is enrolled in the course
+      const enrollments = await db.query('enrollments',
+        (enrollment: any) => enrollment.userId === userId && enrollment.courseId === courseId
+      );
+      
+      return enrollments.length > 0;
+    } catch (error) {
+      console.error('Error checking if user can rate course:', error);
+      return false;
+    }
+  }
+
+  // Get top-rated courses
+  async getTopRatedCourses(limit: number = 10): Promise<any[]> {
+    try {
+      const courses = await db.getAll(this.coursesCollection);
+      
+      // Filter published courses with ratings and sort by rating
+      const topCourses = courses
+        .filter((course: any) => course.status === 'published' && course.rating > 0)
+        .sort((a: any, b: any) => {
+          // Sort by rating first, then by number of ratings
+          if (b.rating !== a.rating) {
+            return b.rating - a.rating;
+          }
+          return (b.ratingCount || 0) - (a.ratingCount || 0);
+        })
+        .slice(0, limit);
+
+      return topCourses;
+    } catch (error) {
+      console.error('Error getting top-rated courses:', error);
+      throw new Error('Failed to get top-rated courses');
+    }
+  }
+
+  // Get recent ratings across all courses
+  async getRecentRatings(limit: number = 20): Promise<CourseRating[]> {
+    try {
+      const allRatings = await db.getAll(this.ratingsCollection);
+      
+      // Sort by creation date (newest first) and limit
+      const recentRatings = allRatings
+        .sort((a: any, b: any) => 
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        )
+        .slice(0, limit);
+
+      return recentRatings;
+    } catch (error) {
+      console.error('Error getting recent ratings:', error);
+      throw new Error('Failed to get recent ratings');
     }
   }
 }

@@ -1,14 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { 
-  collection, 
-  getDocs, 
-  doc, 
-  updateDoc,
-  deleteDoc,
-  query,
-  where
-} from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { db } from "@/lib/database";
 import {
   Table,
   TableBody,
@@ -32,508 +23,559 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger 
+  DialogTrigger
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
-import { Loader2, Trash2, UserCog, Search, RefreshCw, BookOpen, BarChart3 } from "lucide-react";
+import { useToast } from "@/components/ui/use-toast";
+import { 
+  Eye, 
+  Edit3, 
+  Trash2, 
+  Plus, 
+  Search, 
+  Users, 
+  BookOpen, 
+  Award,
+  Calendar,
+  Mail,
+  Phone,
+  MapPin,
+  Loader2
+} from "lucide-react";
+import { format } from "date-fns";
 import { courseService } from "@/services/courseService";
 import { enrollmentService } from "@/services/enrollmentService";
-import { UserProgress } from "@/services/progressService";
+import { progressService } from "@/services/progressService";
 
 interface User {
   uid: string;
+  displayName: string;
   email: string;
-  role: 'learner' | 'educator' | 'admin';
-  createdAt: {
-    seconds: number;
-    nanoseconds: number;
-  };
+  role: "student" | "lecturer" | "admin";
+  createdAt: any;
+  lastLogin?: any;
+  status: "active" | "inactive" | "suspended";
+  profilePicture?: string;
+  phone?: string;
+  location?: string;
+  bio?: string;
 }
 
-interface UserWithProgress extends User {
-  enrollments?: number;
-  completedCourses?: number;
-  totalCourses?: number;
-  averageProgress?: number;
-  progress?: {
-    courseId: string;
-    courseName: string;
-    progress: number;
-  }[];
+interface UserProgress {
+  courseId: string;
+  courseName: string;
+  completionPercentage: number;
+  lastAccessed: any;
 }
 
-const UserManagement: React.FC = () => {
-  const [users, setUsers] = useState<UserWithProgress[]>([]);
+const UserManagement = () => {
+  const [users, setUsers] = useState<User[]>([]);
+  const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedUser, setSelectedUser] = useState<UserWithProgress | null>(null);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [userProgress, setUserProgress] = useState<UserProgress[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [roleFilter, setRoleFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [isRoleDialogOpen, setIsRoleDialogOpen] = useState(false);
-  const [isProgressDialogOpen, setIsProgressDialogOpen] = useState(false);
-  const [newRole, setNewRole] = useState<'learner' | 'educator' | 'admin'>('learner');
-  const [isUpdating, setIsUpdating] = useState(false);
-  const [loadingProgress, setLoadingProgress] = useState(false);
-
-  const fetchUsers = async () => {
-    setLoading(true);
-    try {
-      const usersCollection = collection(db, "users");
-      const userSnapshot = await getDocs(usersCollection);
-      const userList = userSnapshot.docs.map(doc => ({
-        ...doc.data(),
-        uid: doc.id
-      })) as UserWithProgress[];
-      
-      // Fetch enrollment and progress data for all learners
-      const learners = userList.filter(user => user.role === 'learner');
-      
-      // Load progress data for learners
-      const usersWithProgress = await Promise.all(
-        userList.map(async (user) => {
-          // Only fetch progress for learners
-          if (user.role !== 'learner') {
-            return user;
-          }
-          
-          try {
-            // Get user enrollments
-            const enrollments = await enrollmentService.getUserEnrollments(user.uid);
-            
-            if (enrollments.length === 0) {
-              // No enrollments yet
-              return {
-                ...user,
-                enrollments: 0,
-                completedCourses: 0,
-                totalCourses: 0,
-                averageProgress: 0,
-                progress: []
-              };
-            }
-            
-            // Get all courses user is enrolled in
-            const courses = await courseService.getEnrolledCourses(user.uid);
-            
-            // Get progress data for each course
-            const progressPromises = courses.map(async (course) => {
-              const courseId = course.firebaseId || course.id.toString();
-              const progressRef = collection(db, "userProgress");
-              const q = query(progressRef, where("userId", "==", user.uid), where("courseId", "==", courseId));
-              const progressDocs = await getDocs(q);
-              
-              if (!progressDocs.empty) {
-                const progressData = progressDocs.docs[0].data() as UserProgress;
-                return {
-                  courseId,
-                  courseName: course.title,
-                  progress: progressData.completionPercentage || 0
-                };
-              }
-              
-              return {
-                courseId,
-                courseName: course.title,
-                progress: 0
-              };
-            });
-            
-            const progressData = await Promise.all(progressPromises);
-            
-            // Calculate completion statistics
-            const completedCourses = progressData.filter(p => p.progress === 100).length;
-            const averageProgress = progressData.length > 0 
-              ? progressData.reduce((sum, p) => sum + p.progress, 0) / progressData.length 
-              : 0;
-            
-            return {
-              ...user,
-              enrollments: enrollments.length,
-              completedCourses,
-              totalCourses: courses.length,
-              averageProgress,
-              progress: progressData
-            };
-          } catch (error) {
-            console.error(`Error fetching progress for user ${user.email}:`, error);
-            return user;
-          }
-        })
-      );
-      
-      console.log("Fetched users with progress:", usersWithProgress.length);
-      setUsers(usersWithProgress);
-    } catch (error) {
-      console.error("Error fetching users:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
+  const [editForm, setEditForm] = useState<Partial<User>>({});
+  const { toast } = useToast();
 
   useEffect(() => {
     fetchUsers();
   }, []);
 
-  const handleUpdateRole = async () => {
-    if (!selectedUser || !newRole) return;
-    
-    setIsUpdating(true);
+  useEffect(() => {
+    filterUsers();
+  }, [users, searchTerm, roleFilter, statusFilter]);
+
+  const fetchUsers = async () => {
     try {
-      const userRef = doc(db, "users", selectedUser.uid);
-      await updateDoc(userRef, {
-        role: newRole
+      setLoading(true);
+      const usersData = await db.getAll("users");
+      setUsers(usersData);
+    } catch (error) {
+      console.error("Error fetching users:", error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch users. Please try again.",
+        variant: "destructive",
       });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filterUsers = () => {
+    let filtered = users;
+
+    // Search filter
+    if (searchTerm) {
+      filtered = filtered.filter(user =>
+        user.displayName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user.email?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    // Role filter
+    if (roleFilter !== "all") {
+      filtered = filtered.filter(user => user.role === roleFilter);
+    }
+
+    // Status filter
+    if (statusFilter !== "all") {
+      filtered = filtered.filter(user => user.status === statusFilter);
+    }
+
+    setFilteredUsers(filtered);
+  };
+
+  const fetchUserProgress = async (userId: string) => {
+    try {
+      const progressData = await progressService.getAllUserProgress(userId);
+      const progressWithCourseNames = await Promise.all(
+        progressData.map(async (progress) => {
+          const course = await courseService.getCourse(progress.courseId);
+          return {
+            courseId: progress.courseId,
+            courseName: course?.title || "Unknown Course",
+            completionPercentage: progress.completionPercentage,
+            lastAccessed: progress.lastAccessed
+          };
+        })
+      );
+      setUserProgress(progressWithCourseNames);
+    } catch (error) {
+      console.error("Error fetching user progress:", error);
+    }
+  };
+
+  const handleViewUser = async (user: User) => {
+    setSelectedUser(user);
+    await fetchUserProgress(user.uid);
+    setIsViewDialogOpen(true);
+  };
+
+  const handleEditUser = (user: User) => {
+    setSelectedUser(user);
+    setEditForm({ ...user });
+    setIsEditDialogOpen(true);
+  };
+
+  const handleDeleteUser = (user: User) => {
+    setSelectedUser(user);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const handleUpdateUser = async () => {
+    if (!selectedUser || !editForm) return;
+
+    try {
+      const updatedUser = {
+        ...selectedUser,
+        ...editForm,
+        updatedAt: new Date()
+      };
+
+      await db.update("users", updatedUser);
       
-      // Update local state
-      setUsers(users.map(user => 
-        user.uid === selectedUser.uid ? { ...user, role: newRole } : user
+      setUsers(prev => prev.map(user => 
+        user.uid === selectedUser.uid ? updatedUser : user
       ));
       
-      setIsRoleDialogOpen(false);
-      console.log(`User ${selectedUser.email} role updated to ${newRole}`);
+      setIsEditDialogOpen(false);
+      toast({
+        title: "Success",
+        description: "User updated successfully.",
+      });
     } catch (error) {
-      console.error("Error updating user role:", error);
-    } finally {
-      setIsUpdating(false);
+      console.error("Error updating user:", error);
+      toast({
+        title: "Error",
+        description: "Failed to update user. Please try again.",
+        variant: "destructive",
+      });
     }
   };
 
-  const handleDeleteUser = async () => {
+  const handleDeleteUserConfirm = async () => {
     if (!selectedUser) return;
-    
-    setIsUpdating(true);
+
     try {
-      const userRef = doc(db, "users", selectedUser.uid);
-      await deleteDoc(userRef);
+      await db.delete("users", selectedUser.uid);
       
-      // Update local state
-      setUsers(users.filter(user => user.uid !== selectedUser.uid));
-      
+      setUsers(prev => prev.filter(user => user.uid !== selectedUser.uid));
       setIsDeleteDialogOpen(false);
-      console.log(`User ${selectedUser.email} deleted`);
+      
+      toast({
+        title: "Success",
+        description: "User deleted successfully.",
+      });
     } catch (error) {
       console.error("Error deleting user:", error);
-    } finally {
-      setIsUpdating(false);
+      toast({
+        title: "Error",
+        description: "Failed to delete user. Please try again.",
+        variant: "destructive",
+      });
     }
   };
 
-  const filteredUsers = searchQuery 
-    ? users.filter(user => 
-        user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        user.role.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : users;
-
-  const formatDate = (timestamp: { seconds: number; nanoseconds: number }) => {
-    if (!timestamp) return "N/A";
-    return new Date(timestamp.seconds * 1000).toLocaleDateString();
-  };
-
-  const getRoleBadgeColor = (role: string) => {
+  const getRoleColor = (role: string) => {
     switch (role) {
-      case 'admin': return "bg-red-100 text-red-800 hover:bg-red-200";
-      case 'educator': return "bg-blue-100 text-blue-800 hover:bg-blue-200";
-      case 'learner': return "bg-green-100 text-green-800 hover:bg-green-200";
-      default: return "bg-gray-100 text-gray-800 hover:bg-gray-200";
+      case "admin": return "bg-red-100 text-red-800";
+      case "lecturer": return "bg-blue-100 text-blue-800";
+      case "student": return "bg-green-100 text-green-800";
+      default: return "bg-gray-100 text-gray-800";
     }
   };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "active": return "bg-green-100 text-green-800";
+      case "inactive": return "bg-yellow-100 text-yellow-800";
+      case "suspended": return "bg-red-100 text-red-800";
+      default: return "bg-gray-100 text-gray-800";
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin" />
+        <span className="ml-2">Loading users...</span>
+      </div>
+    );
+  }
 
   return (
-    <Card className="w-full">
-      <CardHeader>
-        <div className="flex justify-between items-center">
-          <div>
-            <CardTitle>User Management</CardTitle>
-            <CardDescription>Manage all registered users in the system</CardDescription>
-          </div>
-          <div className="flex gap-2">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={fetchUsers} 
-              disabled={loading}
-            >
-              {loading ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4 mr-2" />
-              )}
-              Refresh
-            </Button>
-            <div className="relative">
-              <Search className="h-4 w-4 absolute left-2.5 top-2.5 text-gray-500" />
-              <Input
-                placeholder="Search users..."
-                className="pl-8 w-[250px]"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Users className="h-5 w-5" />
+            User Management
+          </CardTitle>
+          <CardDescription>
+            Manage users, view their progress, and update their information.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {/* Filters */}
+          <div className="mb-6 flex flex-wrap gap-4">
+            <div className="flex-1 min-w-[200px]">
+              <Label htmlFor="search">Search Users</Label>
+              <div className="relative">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-500" />
+                <Input
+                  id="search"
+                  placeholder="Search by name or email..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-8"
+                />
+              </div>
+            </div>
+            
+            <div>
+              <Label htmlFor="role-filter">Role</Label>
+              <select
+                id="role-filter"
+                value={roleFilter}
+                onChange={(e) => setRoleFilter(e.target.value)}
+                className="w-full p-2 border rounded-md"
+              >
+                <option value="all">All Roles</option>
+                <option value="student">Students</option>
+                <option value="lecturer">Lecturers</option>
+                <option value="admin">Admins</option>
+              </select>
+            </div>
+            
+            <div>
+              <Label htmlFor="status-filter">Status</Label>
+              <select
+                id="status-filter"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="w-full p-2 border rounded-md"
+              >
+                <option value="all">All Statuses</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+                <option value="suspended">Suspended</option>
+              </select>
             </div>
           </div>
-        </div>
-      </CardHeader>
-      <CardContent>
-        {loading ? (
-          <div className="flex justify-center items-center py-8">
-            <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-          </div>
-        ) : (
-          <div className="border rounded-lg overflow-hidden">
+
+          {/* Users Table */}
+          <div className="rounded-md border">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Email</TableHead>
+                  <TableHead>User</TableHead>
                   <TableHead>Role</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableHead>Created</TableHead>
-                  <TableHead>Progress</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead>Last Login</TableHead>
+                  <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredUsers.length > 0 ? (
-                  filteredUsers.map((user) => (
-                    <TableRow key={user.uid}>
-                      <TableCell className="font-medium">{user.email}</TableCell>
-                      <TableCell>
-                        <Badge className={getRoleBadgeColor(user.role)}>{user.role}</Badge>
-                      </TableCell>
-                      <TableCell>{formatDate(user.createdAt)}</TableCell>
-                      <TableCell>
-                        {user.role === 'learner' ? (
-                          <div className="flex flex-col gap-1">
-                            {user.totalCourses ? (
-                              <>
-                                <div className="flex items-center gap-2">
-                                  <Progress value={user.averageProgress || 0} className="h-2 w-28" />
-                                  <span className="text-sm text-gray-600">{Math.round(user.averageProgress || 0)}%</span>
-                                </div>
-                                <div className="flex gap-4 text-xs text-gray-500">
-                                  <span>
-                                    <BookOpen className="h-3 w-3 inline mr-1" />
-                                    {user.enrollments} course{user.enrollments !== 1 ? 's' : ''}
-                                  </span>
-                                  <span>
-                                    <BarChart3 className="h-3 w-3 inline mr-1" />
-                                    {user.completedCourses}/{user.totalCourses} completed
-                                  </span>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-5 px-1 py-0 text-xs"
-                                    onClick={() => {
-                                      setSelectedUser(user);
-                                      setIsProgressDialogOpen(true);
-                                    }}
-                                  >
-                                    Details
-                                  </Button>
-                                </div>
-                              </>
-                            ) : (
-                              <span className="text-xs text-gray-500">No enrollments</span>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-xs text-gray-500">N/A</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setSelectedUser(user);
-                              setNewRole(user.role);
-                              setIsRoleDialogOpen(true);
-                            }}
-                          >
-                            <UserCog className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => {
-                              setSelectedUser(user);
-                              setIsDeleteDialogOpen(true);
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                {filteredUsers.map((user) => (
+                  <TableRow key={user.uid}>
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center">
+                          {user.displayName?.charAt(0).toUpperCase() || "U"}
                         </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={4} className="text-center py-6 text-gray-500">
-                      No users found
+                        <div>
+                          <div className="font-medium">{user.displayName || "No Name"}</div>
+                          <div className="text-sm text-gray-500">{user.email}</div>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={getRoleColor(user.role)}>
+                        {user.role}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={getStatusColor(user.status)}>
+                        {user.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {user.createdAt ? format(new Date(user.createdAt), "MMM dd, yyyy") : "Unknown"}
+                    </TableCell>
+                    <TableCell>
+                      {user.lastLogin ? format(new Date(user.lastLogin), "MMM dd, yyyy") : "Never"}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleViewUser(user)}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleEditUser(user)}
+                        >
+                          <Edit3 className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteUser(user)}
+                          className="text-red-600 hover:text-red-800"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
-                )}
+                ))}
               </TableBody>
             </Table>
           </div>
-        )}
-        
-        {/* Change Role Dialog */}
-        <Dialog open={isRoleDialogOpen} onOpenChange={setIsRoleDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Change User Role</DialogTitle>
-              <DialogDescription>
-                Update the role for {selectedUser?.email}
-              </DialogDescription>
-            </DialogHeader>
-            <Select 
-              value={newRole} 
-              onValueChange={(value: 'learner' | 'educator' | 'admin') => setNewRole(value)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select role" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="learner">Learner</SelectItem>
-                <SelectItem value="educator">Educator</SelectItem>
-                <SelectItem value="admin">Admin</SelectItem>
-              </SelectContent>
-            </Select>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsRoleDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleUpdateRole} disabled={isUpdating}>
-                {isUpdating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Save Changes
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
 
-        {/* Delete User Dialog */}
-        <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Delete User</DialogTitle>
-              <DialogDescription>
-                Are you sure you want to delete this user? This action cannot be undone.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="bg-amber-50 border border-amber-200 rounded-md p-3 text-amber-800 text-sm">
-              <p><span className="font-medium">Email:</span> {selectedUser?.email}</p>
-              <p><span className="font-medium">Role:</span> {selectedUser?.role}</p>
+          {filteredUsers.length === 0 && (
+            <div className="text-center py-8 text-gray-500">
+              No users found matching your criteria.
             </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button variant="destructive" onClick={handleDeleteUser} disabled={isUpdating}>
-                {isUpdating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Delete User
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-        
-        {/* User Progress Details Dialog */}
-        <Dialog open={isProgressDialogOpen} onOpenChange={setIsProgressDialogOpen}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Learner Progress Details</DialogTitle>
-              <DialogDescription>
-                Detailed progress for {selectedUser?.email}
-              </DialogDescription>
-            </DialogHeader>
-            
-            {loadingProgress ? (
-              <div className="flex justify-center items-center py-8">
-                <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <p className="text-sm text-gray-500">Enrolled Courses</p>
-                    <p className="text-2xl font-bold">{selectedUser?.enrollments || 0}</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* View User Dialog */}
+      <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>User Details</DialogTitle>
+            <DialogDescription>
+              Detailed information about {selectedUser?.displayName}
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedUser && (
+            <Tabs defaultValue="info" className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="info">User Information</TabsTrigger>
+                <TabsTrigger value="progress">Course Progress</TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="info" className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Display Name</Label>
+                    <p className="text-sm font-medium">{selectedUser.displayName || "No Name"}</p>
                   </div>
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <p className="text-sm text-gray-500">Completed Courses</p>
-                    <p className="text-2xl font-bold">{selectedUser?.completedCourses || 0}</p>
+                  <div>
+                    <Label>Email</Label>
+                    <p className="text-sm font-medium">{selectedUser.email}</p>
                   </div>
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <p className="text-sm text-gray-500">Average Progress</p>
-                    <p className="text-2xl font-bold">{Math.round(selectedUser?.averageProgress || 0)}%</p>
+                  <div>
+                    <Label>Role</Label>
+                    <Badge className={getRoleColor(selectedUser.role)}>
+                      {selectedUser.role}
+                    </Badge>
+                  </div>
+                  <div>
+                    <Label>Status</Label>
+                    <Badge className={getStatusColor(selectedUser.status)}>
+                      {selectedUser.status}
+                    </Badge>
+                  </div>
+                  <div>
+                    <Label>Created Date</Label>
+                    <p className="text-sm font-medium">
+                      {selectedUser.createdAt ? format(new Date(selectedUser.createdAt), "PPP") : "Unknown"}
+                    </p>
+                  </div>
+                  <div>
+                    <Label>Last Login</Label>
+                    <p className="text-sm font-medium">
+                      {selectedUser.lastLogin ? format(new Date(selectedUser.lastLogin), "PPP") : "Never"}
+                    </p>
                   </div>
                 </div>
-                
-                <div className="border rounded-lg overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Course</TableHead>
-                        <TableHead className="w-48">Progress</TableHead>
-                        <TableHead className="text-right">Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {selectedUser?.progress && selectedUser.progress.length > 0 ? (
-                        selectedUser.progress.map((course) => (
-                          <TableRow key={course.courseId}>
-                            <TableCell className="font-medium">{course.courseName}</TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                <Progress value={course.progress} className="h-2 flex-1" />
-                                <span className="text-sm text-gray-600 w-10">{Math.round(course.progress)}%</span>
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-right">
-                              {course.progress === 100 ? (
-                                <Badge variant="outline" className="bg-green-100 text-green-800 hover:bg-green-200">
-                                  Completed
-                                </Badge>
-                              ) : course.progress > 0 ? (
-                                <Badge variant="outline" className="bg-amber-100 text-amber-800 hover:bg-amber-200">
-                                  In Progress
-                                </Badge>
-                              ) : (
-                                <Badge variant="outline" className="bg-gray-100 text-gray-800 hover:bg-gray-200">
-                                  Not Started
-                                </Badge>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        ))
-                      ) : (
-                        <TableRow>
-                          <TableCell colSpan={3} className="text-center py-6 text-gray-500">
-                            No course progress found
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
+              </TabsContent>
+              
+              <TabsContent value="progress" className="space-y-4">
+                <div className="space-y-4">
+                  {userProgress.length > 0 ? (
+                    userProgress.map((progress, index) => (
+                      <Card key={index}>
+                        <CardContent className="pt-4">
+                          <div className="flex justify-between items-start mb-2">
+                            <div>
+                              <h4 className="font-medium">{progress.courseName}</h4>
+                              <p className="text-sm text-gray-500">
+                                Last accessed: {progress.lastAccessed ? 
+                                  format(new Date(progress.lastAccessed), "PPP") : "Unknown"}
+                              </p>
+                            </div>
+                            <Badge variant={progress.completionPercentage === 100 ? "default" : "secondary"}>
+                              {progress.completionPercentage}% Complete
+                            </Badge>
+                          </div>
+                          <Progress value={progress.completionPercentage} className="w-full" />
+                        </CardContent>
+                      </Card>
+                    ))
+                  ) : (
+                    <div className="text-center py-8 text-gray-500">
+                      No course progress found for this user.
+                    </div>
+                  )}
                 </div>
-              </div>
-            )}
+              </TabsContent>
+            </Tabs>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit User Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit User</DialogTitle>
+            <DialogDescription>
+              Update user information and settings.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="edit-name">Display Name</Label>
+              <Input
+                id="edit-name"
+                value={editForm.displayName || ""}
+                onChange={(e) => setEditForm({ ...editForm, displayName: e.target.value })}
+              />
+            </div>
             
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsProgressDialogOpen(false)}>
-                Close
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </CardContent>
-    </Card>
+            <div>
+              <Label htmlFor="edit-email">Email</Label>
+              <Input
+                id="edit-email"
+                type="email"
+                value={editForm.email || ""}
+                onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="edit-role">Role</Label>
+              <select
+                id="edit-role"
+                value={editForm.role || "student"}
+                onChange={(e) => setEditForm({ ...editForm, role: e.target.value as any })}
+                className="w-full p-2 border rounded-md"
+              >
+                <option value="student">Student</option>
+                <option value="lecturer">Lecturer</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+            
+            <div>
+              <Label htmlFor="edit-status">Status</Label>
+              <select
+                id="edit-status"
+                value={editForm.status || "active"}
+                onChange={(e) => setEditForm({ ...editForm, status: e.target.value as any })}
+                className="w-full p-2 border rounded-md"
+              >
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+                <option value="suspended">Suspended</option>
+              </select>
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleUpdateUser}>
+              Update User
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete User Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete User</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete {selectedUser?.displayName}? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteUserConfirm}>
+              Delete User
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 };
 

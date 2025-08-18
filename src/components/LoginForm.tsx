@@ -12,8 +12,10 @@ import { useAuth } from "@/contexts/AuthContext";
 const LoginForm = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [role, setRole] = useState<'learner' | 'educator' | 'admin'>('learner');
+  const [role, setRole] = useState<'student' | 'lecturer' | 'admin'>('student');
   const [isSignUp, setIsSignUp] = useState(false);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
@@ -22,7 +24,7 @@ const LoginForm = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!email || !password) {
+    if (!email || !password || (isSignUp && (!firstName || !lastName))) {
       toast({
         title: "Missing Information",
         description: "Please fill in all fields",
@@ -35,7 +37,7 @@ const LoginForm = () => {
 
     try {
       if (isSignUp) {
-        await signup(email, password, role);
+        await signup(email, password, role, firstName, lastName);
         toast({
           title: "Account Created!",
           description: "Welcome to SgilaSkeem! Your account has been created successfully.",
@@ -86,19 +88,45 @@ const LoginForm = () => {
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               {isSignUp && (
-                <div className="space-y-2">
-                  <Label htmlFor="role">I am a:</Label>
-                  <Select value={role} onValueChange={(value: 'learner' | 'educator' | 'admin') => setRole(value)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select your role" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="learner">Learner</SelectItem>
-                      <SelectItem value="educator">Educator</SelectItem>
-                      <SelectItem value="admin">Administrator</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="firstName">First Name</Label>
+                      <Input
+                        id="firstName"
+                        type="text"
+                        placeholder="Your first name"
+                        value={firstName}
+                        onChange={(e) => setFirstName(e.target.value)}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="lastName">Last Name</Label>
+                      <Input
+                        id="lastName"
+                        type="text"
+                        placeholder="Your last name"
+                        value={lastName}
+                        onChange={(e) => setLastName(e.target.value)}
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="role">I am a:</Label>
+                    <Select value={role} onValueChange={(value: 'student' | 'lecturer' | 'admin') => setRole(value)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select your role" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="student">Student</SelectItem>
+                        <SelectItem value="lecturer">Lecturer</SelectItem>
+                        <SelectItem value="admin">Administrator</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
               )}
 
               <div className="space-y-2">

@@ -2,16 +2,15 @@ import { useState, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Database, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
-import { collection, getDocs, limit, query } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { db } from "@/lib/database";
 
 /**
- * Firebase Status Indicator
+ * Database Status Indicator
  * 
- * Shows the current connection status with Firebase.
- * Can be placed anywhere in the UI to give users feedback about Firebase connectivity.
+ * Shows the current connection status with IndexedDB.
+ * Can be placed anywhere in the UI to give users feedback about database connectivity.
  */
-const FirebaseStatus = () => {
+const DatabaseStatus = () => {
   const [status, setStatus] = useState<"connecting" | "connected" | "error">("connecting");
   const [count, setCount] = useState<number | null>(null);
   const [lastChecked, setLastChecked] = useState<Date | null>(null);
@@ -19,15 +18,14 @@ const FirebaseStatus = () => {
   useEffect(() => {
     const checkConnection = async () => {
       try {
-        // Check if Firebase is accessible by querying the courses collection
-        const q = query(collection(db, "courses"), limit(5));
-        const snapshot = await getDocs(q);
+        // Check if IndexedDB is accessible by querying the courses collection
+        const courses = await db.getAll("courses");
         
-        setCount(snapshot.size);
+        setCount(courses.length);
         setStatus("connected");
         setLastChecked(new Date());
       } catch (error) {
-        console.error("Firebase connection error:", error);
+        console.error("Database connection error:", error);
         setStatus("error");
         setLastChecked(new Date());
       }
@@ -58,17 +56,17 @@ const FirebaseStatus = () => {
             <Database className="h-3 w-3" />
             <span className="text-xs">
               {status === "connecting" ? "Connecting..." : 
-               status === "connected" ? "Firebase" : "Firebase Error"}
+               status === "connected" ? "IndexedDB" : "Database Error"}
             </span>
           </Badge>
         </TooltipTrigger>
         <TooltipContent side="bottom" className="p-3 max-w-xs">
           <div className="space-y-1">
-            <p className="font-medium">Firebase Status</p>
+            <p className="font-medium">Database Status</p>
             <p className="text-sm">
-              {status === "connecting" ? "Connecting to Firebase..." : 
+              {status === "connecting" ? "Connecting to IndexedDB..." : 
                status === "connected" ? `Connected: ${count} courses available` : 
-               "Error connecting to Firebase"}
+               "Error connecting to IndexedDB"}
             </p>
             {lastChecked && (
               <p className="text-xs text-gray-500">
@@ -82,4 +80,4 @@ const FirebaseStatus = () => {
   );
 };
 
-export default FirebaseStatus;
+export default DatabaseStatus;

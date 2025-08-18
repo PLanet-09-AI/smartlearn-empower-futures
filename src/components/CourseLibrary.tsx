@@ -14,8 +14,7 @@ import { enrollmentService } from "@/services/enrollmentService";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 import removeMarkdown from "remove-markdown";
-import { collection, query, where, getDocs } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { db } from "@/lib/database";
 function cleanPlainText(text: string): string {
   // Remove markdown, then extra dashes, hashes, and blank lines
   let cleaned = removeMarkdown(text);
@@ -95,21 +94,11 @@ const CourseLibrary = ({ userRole, onCourseSelect, courses }: CourseLibraryProps
           setEnrolledCourseIds(courseIds);
           
           // Load course completion status
-          const progressQuery = query(
-            collection(db, "userProgress"),
-            where("userId", "==", currentUser.uid),
-            where("completionPercentage", "==", 100)
+          const userProgressData = await db.query("userProgress", 
+            (progress: any) => progress.userId === currentUser.uid && progress.completionPercentage === 100
           );
           
-          const progressSnapshot = await getDocs(progressQuery);
-          const completedIds: string[] = [];
-          
-          progressSnapshot.forEach(doc => {
-            const data = doc.data();
-            if (data.courseId) {
-              completedIds.push(data.courseId);
-            }
-          });
+          const completedIds: string[] = userProgressData.map((progress: any) => progress.courseId).filter(Boolean);
           
           setCompletedCourseIds(completedIds);
           console.log("Completed courses:", completedIds);

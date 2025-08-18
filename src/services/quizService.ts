@@ -1,8 +1,4 @@
-import { db } from '@/lib/firebase';
-import { 
-  collection, doc, getDoc, updateDoc, addDoc, setDoc,
-  serverTimestamp, getDocs, query, where, Timestamp 
-} from 'firebase/firestore';
+import { db, serverTimestamp } from '@/lib/database';
 import { 
   Course, 
   Quiz, 
@@ -25,11 +21,6 @@ export class QuizService {
 
   /**
    * Starts a new AI-powered quiz based on course content
-   * @param courseId The ID of the course to generate a quiz for
-   * @param userId The ID of the user taking the quiz
-   * @param numQuestions Number of questions to generate (default: 5)
-   * @param customPrompt Optional custom prompt from the lecturer
-   * @param temperature Optional temperature setting (0.0-1.0)
    */
   async startQuiz(
     courseId: string, 
@@ -44,36 +35,31 @@ export class QuizService {
   }> {
     try {
       console.log(`Starting AI quiz for course ${courseId} with ${numQuestions} questions`);
-      console.log(`Using temperature: ${temperature}`);
-      if (customPrompt) console.log(`Using custom prompt engineering`);
       
       // Get the course content
-      const courseRef = doc(db, this.coursesCollection, courseId);
-      const courseDoc = await getDoc(courseRef);
+      const courseData = await db.get(this.coursesCollection, courseId);
       
-      if (!courseDoc.exists()) {
+      if (!courseData) {
         throw new Error('Course not found');
       }
       
-      const courseData = courseDoc.data() as Course;
-      
       // Extract text content from the course
       const contentTexts = courseData.content
-        ?.map(item => ({
+        ?.map((item: any) => ({
           title: item.title,
           content: item.content || ''
         }))
-        .filter(item => item.content.length > 0) || [];
+        .filter((item: any) => item.content.length > 0) || [];
       
       // Format the course content for the AI prompt
       const contentForPrompt = contentTexts
-        .map(item => `Section: ${item.title}\nContent: ${item.content}`)
+        .map((item: any) => `Section: ${item.title}\nContent: ${item.content}`)
         .join('\n\n')
-        .substring(0, 4000); // Limit to 4000 chars to ensure it fits in the prompt
+        .substring(0, 4000);
       
       const generatedAt = new Date();
       
-  // Generate quiz questions using Ollama (local LLM) from course content
+      // Generate quiz questions using Ollama (local LLM) from course content
       const defaultQuizPrompt = `
 I need you to create a quiz based on the following course content:
 
@@ -99,17 +85,17 @@ Make sure questions are varied and cover different sections of the content. The 
                       .replace("{courseTitle}", courseData.title)
                       .replace("{courseDescription}", courseData.description || '')
                       .replace("{numQuestions}", numQuestions.toString())
-        : defaultQuizPrompt; 
+        : defaultQuizPrompt;
 
-  const questionsJson = await azureOpenAIService.generateText([
+      const questionsJson = await azureOpenAIService.generateText([
         { role: "system", content: "You are a quiz generator specializing in accountancy education." },
         { role: "user", content: finalPrompt }
       ]);
       
-      // 3) Parse and clean up the JSON response
+      // Parse and clean up the JSON response
       const questionsData = this.deserializeQuestions(questionsJson);
       
-      // 4) Create a new quiz object
+      // Create a new quiz object
       const quiz: Quiz = {
         id: `quiz_ai_${Date.now()}`,
         title: `AI Quiz: ${courseData.title}`,
@@ -122,37 +108,35 @@ Make sure questions are varied and cover different sections of the content. The 
           explanation: q.options.find(o => o.isCorrect)?.explanation || ''
         }))
       };
-      
-      // 5) Save the quiz result to Firebase
-      const quizResultId = uuidv4();
-      await addDoc(collection(db, this.quizResultsCollection), {
-        id: quizResultId,
+
+      // Create a quiz result record for tracking this attempt
+      const quizResultId = await db.add(this.quizResultsCollection, {
         userId: userId,
         courseId: courseId,
-        contentSummary: courseData.title,
-        questionsJson: questionsJson,
-        generatedAt: Timestamp.fromDate(generatedAt),
-        attemptedAt: null,
-        score: 0,
-        isCompleted: false
+        quizId: quiz.id,
+        isCompleted: false,
+        generatedAt: generatedAt,
+        quiz: quiz
       });
-      
+
+      console.log(`✅ AI quiz generated successfully for course ${courseId}`);
+      console.log(`📝 Generated ${quiz.questions.length} questions`);
+      console.log(`🆔 Quiz result ID: ${quizResultId}`);
+
       return {
         quiz,
         quizResultId,
         generatedAt
       };
+
     } catch (error) {
-      console.error('Error generating AI quiz:', error);
+      console.error('❌ Error generating AI quiz:', error);
       throw new Error('Failed to generate AI quiz');
     }
   }
 
   /**
    * Submit quiz answers and calculate results
-   * @param quizResultId The ID of the quiz result document
-   * @param userId The ID of the user submitting the quiz
-   * @param submission The user's quiz submission with answers
    */
   async submitQuiz(quizResultId: string, userId: string, submission: {
     questions: { questionId: string, selectedOptionId: number }[]
@@ -167,94 +151,65 @@ Make sure questions are varied and cover different sections of the content. The 
     previousHighScore: number
   }> {
     try {
-      // 1) Load the quiz result
-      const quizResultsRef = collection(db, this.quizResultsCollection);
-      const q = query(quizResultsRef, where("id", "==", quizResultId));
-      const snapshot = await getDocs(q);
+      // Get the quiz result record
+      const quizResult = await db.get(this.quizResultsCollection, quizResultId);
       
-      if (snapshot.empty) {
+      if (!quizResult) {
         throw new Error('Quiz result not found');
       }
-      
-      const quizResultDoc = snapshot.docs[0];
-      const quizResult = quizResultDoc.data() as any;
-      
-      if (quizResult.userId !== userId) {
-        throw new Error('Unauthorized access to quiz result');
-      }
-      
-      if (quizResult.isCompleted) {
-        throw new Error('Quiz already submitted');
-      }
-      
-      // 2) Parse the questions JSON
-      const questions = this.deserializeQuestions(quizResult.questionsJson);
-      
-      // 2.1) Check user's previous highest score for this course
-      const previousScores = await this.getUserCourseScores(userId, quizResult.courseId);
-      const previousHighScore = previousScores.length > 0 ? Math.max(...previousScores) : 0;
-      
-      // 3) Calculate results
+
+      const quiz = quizResult.quiz as Quiz;
       const attemptedAt = new Date();
+      
+      // Calculate score and collect answer details
       let correctCount = 0;
       const selectedAnswers: Record<string, boolean> = {};
       const explanations: Record<string, string> = {};
       const correctAnswers: Record<string, string> = {};
       const userAnswers: Record<string, string> = {};
-      
-      // Process each submitted answer
+
+      // Store individual quiz answers for analytics
       for (const answer of submission.questions) {
-        const questionId = answer.questionId;
-        const selectedOptionId = answer.selectedOptionId;
-        
-        // Find the corresponding question in our parsed data
-        const questionData = questions.find(q => `q_${q.id}` === questionId);
-        
-        if (!questionData) {
-          console.error(`Question with ID ${questionId} not found`);
-          continue;
+        const question = quiz.questions.find(q => q.id === answer.questionId);
+        if (question) {
+          const isCorrect = question.correctAnswer === answer.selectedOptionId;
+          if (isCorrect) correctCount++;
+
+          selectedAnswers[answer.questionId] = isCorrect;
+          explanations[answer.questionId] = question.explanation || '';
+          correctAnswers[answer.questionId] = question.options[question.correctAnswer];
+          userAnswers[answer.questionId] = question.options[answer.selectedOptionId];
+
+          // Store individual answer
+          await db.add(this.quizAnswersCollection, {
+            quizResultId: quizResultId,
+            questionId: answer.questionId,
+            selectedOptionId: answer.selectedOptionId,
+            isCorrect: isCorrect,
+            submittedAt: attemptedAt
+          });
         }
-        
-        const selectedOption = questionData.options[selectedOptionId];
-        const correctOption = questionData.options.find(o => o.isCorrect);
-        
-        if (!selectedOption || !correctOption) {
-          console.error(`Invalid option data for question ${questionId}`);
-          continue;
-        }
-        
-        const isCorrect = selectedOption.isCorrect;
-        if (isCorrect) correctCount++;
-        
-        selectedAnswers[questionId] = isCorrect;
-        explanations[questionId] = selectedOption.explanation;
-        correctAnswers[questionId] = correctOption.text;
-        userAnswers[questionId] = selectedOption.text;
-        
-        // Save individual answer
-        await addDoc(collection(db, this.quizAnswersCollection), {
-          quizResultId: quizResultId,
-          userId: userId,
-          questionId: questionId,
-          selectedOptionId: selectedOptionId,
-          isCorrect: isCorrect,
-          submittedAt: Timestamp.fromDate(attemptedAt)
-        });
       }
-      
-      // 4) Calculate score as percentage
-      const score = questions.length > 0 ? Math.round((correctCount / questions.length) * 100) : 0;
-      
-      // 4.1) Determine if this is a new high score
-      const isNewHighScore = score > previousHighScore;
-      
-      // 5) Update the quiz result
-      await updateDoc(quizResultDoc.ref, {
-        attemptedAt: Timestamp.fromDate(attemptedAt),
+
+      const score = Math.round((correctCount / quiz.questions.length) * 100);
+
+      // Update the quiz result with completion details
+      await db.update(this.quizResultsCollection, {
+        ...quizResult,
+        isCompleted: true,
         score: score,
-        isCompleted: true
+        attemptedAt: attemptedAt,
       });
+
+      // Check for previous high score
+      const userResults = await db.query(this.quizResultsCollection, 
+        (item: any) => item.userId === userId && item.courseId === quiz.courseId && item.isCompleted
+      );
       
+      const previousScores = userResults.map((result: any) => result.score || 0);
+      const previousHighScore = previousScores.length > 0 ? Math.max(...previousScores) : 0;
+      const isNewHighScore = score > previousHighScore;
+
       return {
         score,
         selectedAnswers,
@@ -265,117 +220,88 @@ Make sure questions are varied and cover different sections of the content. The 
         isNewHighScore,
         previousHighScore
       };
+
     } catch (error) {
-      console.error('Error submitting quiz:', error);
+      console.error('❌ Error submitting quiz:', error);
       throw new Error('Failed to submit quiz');
     }
   }
 
   /**
    * Get leaderboard entries for quizzes
-   * @param courseId Optional course ID to filter by
-   * @param topCount Number of entries to return
    */
   async getLeaderboard(courseId?: string, topCount: number = 10): Promise<LeaderboardEntry[]> {
     try {
-      // 1) Query completed quiz results
-      let quizResultsRef = collection(db, this.quizResultsCollection);
-      let q = query(quizResultsRef, where("isCompleted", "==", true));
+      let allResults = await db.getAll(this.quizResultsCollection);
       
-      // Filter by course if provided
+      // Filter by course if specified
       if (courseId) {
-        q = query(q, where("courseId", "==", courseId));
+        allResults = allResults.filter((result: any) => result.courseId === courseId);
       }
       
-      const snapshot = await getDocs(q);
-      
-      // 2) Map to leaderboard entries
-      const entries: Record<string, LeaderboardEntry[]> = {};
-      
-      for (const quizDoc of snapshot.docs) {
-        const data = quizDoc.data() as any;
-        const userId = data.userId;
+      // Filter completed results and group by user
+      const completedResults = allResults.filter((result: any) => result.isCompleted);
+      const userBestScores = new Map<string, any>();
+
+      for (const result of completedResults) {
+        const userId = result.userId;
+        const existing = userBestScores.get(userId);
+        
+        if (!existing || result.score > existing.score) {
+          userBestScores.set(userId, result);
+        }
+      }
+
+      // Convert to leaderboard entries and sort
+      const leaderboard: LeaderboardEntry[] = [];
+      for (const [userId, result] of userBestScores) {
         const userName = await this.getUserName(userId);
-        const courseRef = await getDoc(doc(db, this.coursesCollection, data.courseId));
-        const courseName = courseRef.exists() ? (courseRef.data() as any)?.title || 'Unknown Course' : 'Unknown Course';
-        
-        const generatedAt = data.generatedAt?.toDate() || new Date();
-        const attemptedAt = data.attemptedAt?.toDate() || new Date();
-        const timeTaken = attemptedAt.getTime() - generatedAt.getTime();
-        
-        const entry: LeaderboardEntry = {
-          id: quizDoc.id,
+        const course = await db.get(this.coursesCollection, result.courseId);
+        leaderboard.push({
+          id: `leaderboard_${userId}_${result.courseId}`,
           userId: userId,
           userName: userName,
-          courseId: data.courseId,
-          courseName: courseName,
-          score: data.score,
-          timeTaken: timeTaken,
-          attemptedAt: attemptedAt
-        };
-        
-        if (!entries[userId]) {
-          entries[userId] = [];
-        }
-        entries[userId].push(entry);
+          score: result.score,
+          attemptedAt: result.attemptedAt,
+          courseId: result.courseId,
+          courseName: course?.title || 'Unknown Course',
+          timeTaken: 0 // Not tracked in current implementation
+        });
       }
-      
-      // 3) Pick each user's best attempt (highest score, then fastest)
-      const bestPerUser = Object.values(entries).map(userEntries => {
-        return userEntries
-          .sort((a, b) => {
-            if (a.score !== b.score) return b.score - a.score;
-            return a.timeTaken - b.timeTaken;
-          })[0];
-      });
-      
-      // 4) Sort and return top N entries
-      return bestPerUser
-        .sort((a, b) => {
-          if (a.score !== b.score) return b.score - a.score;
-          return a.timeTaken - b.timeTaken;
-        })
+
+      // Sort by score (descending) and return top entries
+      return leaderboard
+        .sort((a, b) => b.score - a.score)
         .slice(0, topCount);
+
     } catch (error) {
-      console.error('Error getting leaderboard:', error);
+      console.error('❌ Error getting leaderboard:', error);
       throw new Error('Failed to get leaderboard');
     }
   }
 
   /**
    * Check if a user has attempted a quiz for a course
-   * @param userId User ID to check
-   * @param courseId Course ID to check
    */
   async hasAttempted(userId: string, courseId: string): Promise<boolean> {
     try {
-      const quizResultsRef = collection(db, this.quizResultsCollection);
-      const q = query(
-        quizResultsRef,
-        where("userId", "==", userId),
-        where("courseId", "==", courseId),
-        where("isCompleted", "==", true)
+      const results = await db.query(this.quizResultsCollection,
+        (item: any) => item.userId === userId && item.courseId === courseId
       );
-      
-      const snapshot = await getDocs(q);
-      return !snapshot.empty;
+      return results.length > 0;
     } catch (error) {
-      console.error('Error checking quiz attempts:', error);
+      console.error('❌ Error checking quiz attempts:', error);
       return false;
     }
   }
 
   /**
    * Get a user's name from their ID
-   * @param userId User ID to lookup
    */
   private async getUserName(userId: string): Promise<string> {
     try {
-      const userDoc = await getDoc(doc(db, 'users', userId));
-      if (userDoc.exists()) {
-        return userDoc.data().displayName || 'Anonymous User';
-      }
-      return 'Anonymous User';
+      const user = await db.get('users', userId);
+      return user?.displayName || 'Anonymous User';
     } catch (error) {
       console.error('Error getting user name:', error);
       return 'Anonymous User';
@@ -383,8 +309,7 @@ Make sure questions are varied and cover different sections of the content. The 
   }
 
   /**
-  * Parse and clean the JSON response from Ollama
-  * @param rawJson The raw JSON string from the AI
+   * Parse and clean the JSON response from Ollama
    */
   private deserializeQuestions(rawJson: string): Array<{
     id: number;
@@ -419,10 +344,6 @@ Make sure questions are varied and cover different sections of the content. The 
 
   /**
    * Generate AI quiz questions based on course content
-   * @param courseId The ID of the course
-   * @param numQuestions Number of questions to generate
-   * @param customPrompt Optional custom prompt from the lecturer
-   * @param temperature Optional temperature setting (0.0-1.0)
    */
   async generateAIQuiz(
     courseId: string, 
@@ -436,22 +357,16 @@ Make sure questions are varied and cover different sections of the content. The 
 
   /**
    * Save quiz results
-   * @param courseId The ID of the course
-   * @param userId The ID of the user
-   * @param score The user's score
    */
   async saveQuizResult(courseId: string, userId: string, score: number): Promise<void> {
     try {
-      await addDoc(collection(db, this.quizResultsCollection), {
+      await db.add(this.quizResultsCollection, {
         courseId,
         userId,
         score,
         isCompleted: true,
         generatedAt: serverTimestamp(),
-        attemptedAt: serverTimestamp()
       });
-      
-      console.log('Quiz result saved successfully');
     } catch (error) {
       console.error('Error saving quiz result:', error);
       throw new Error('Failed to save quiz result');
@@ -460,26 +375,12 @@ Make sure questions are varied and cover different sections of the content. The 
 
   /**
    * Get quiz results for a user
-   * @param userId The ID of the user
    */
   async getUserQuizResults(userId: string): Promise<any[]> {
     try {
-      const q = query(
-        collection(db, this.quizResultsCollection),
-        where("userId", "==", userId),
-        where("isCompleted", "==", true)
+      const results = await db.query(this.quizResultsCollection,
+        (item: any) => item.userId === userId
       );
-      
-      const snapshot = await getDocs(q);
-      const results: any[] = [];
-      
-      snapshot.forEach(doc => {
-        results.push({
-          id: doc.id,
-          ...doc.data()
-        });
-      });
-      
       return results;
     } catch (error) {
       console.error('Error getting user quiz results:', error);
@@ -489,277 +390,69 @@ Make sure questions are varied and cover different sections of the content. The 
 
   /**
    * Get user's previous scores for a specific course
-   * @param userId The ID of the user
-   * @param courseId The ID of the course
    */
   async getUserCourseScores(userId: string, courseId: string): Promise<number[]> {
     try {
-      const q = query(
-        collection(db, this.quizResultsCollection),
-        where("userId", "==", userId),
-        where("courseId", "==", courseId),
-        where("isCompleted", "==", true)
+      const results = await db.query(this.quizResultsCollection,
+        (item: any) => item.userId === userId && item.courseId === courseId && item.isCompleted
       );
-      
-      const snapshot = await getDocs(q);
-      const scores: number[] = [];
-      
-      snapshot.forEach(doc => {
-        const data = doc.data();
-        if (data.score !== undefined) {
-          scores.push(data.score);
-        }
-      });
-      
-      console.log(`Previous scores for user ${userId} in course ${courseId}:`, scores);
-      return scores;
+      return results.map((result: any) => result.score || 0);
     } catch (error) {
       console.error('Error getting user course scores:', error);
-      return [];
+      throw new Error('Failed to get user course scores');
     }
   }
 
   /**
    * Get detailed quiz analytics for lecturers and admins
-   * @param courseId Optional course ID to filter by
    */
   async getQuizAnalytics(courseId?: string): Promise<QuizAnalytics[]> {
     try {
-      // 1) Query the analytics collection first for cached analytics
-      let quizAnalyticsRef = collection(db, this.quizAnalyticsCollection);
-      let q = courseId 
-        ? query(quizAnalyticsRef, where("courseId", "==", courseId))
-        : quizAnalyticsRef;
-      
-      const analyticsSnapshot = await getDocs(q);
-      const analyticsExists = !analyticsSnapshot.empty;
-      
-      // If we have cached analytics and they're recent (within 1 hour), use them
-      if (analyticsExists) {
-        const analytics: QuizAnalytics[] = [];
-        analyticsSnapshot.forEach(doc => {
-          const data = doc.data() as any;
-          // Convert timestamps to dates
-          const userResults = data.userResults?.map((user: any) => ({
-            ...user,
-            attemptedAt: user.attemptedAt?.toDate() || new Date()
-          })) || [];
-          
-          analytics.push({
-            ...data,
-            userResults
-          });
-        });
-        
-        // Check if the analytics are fresh (within the last hour)
-        const isFresh = analytics.every(a => {
-          const lastUpdated = a.lastUpdated?.toDate() || new Date(0);
-          const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-          return lastUpdated > oneHourAgo;
-        });
-        
-        if (isFresh) {
-          console.log('Using cached quiz analytics');
-          return analytics;
-        }
-      }
-      
-      // Otherwise, generate new analytics
-      console.log('Generating fresh quiz analytics');
-      
-      // 2) Query quiz results
-      let quizResultsRef = collection(db, this.quizResultsCollection);
-      let resultsQuery = query(quizResultsRef, where("isCompleted", "==", true));
+      let allResults = await db.getAll(this.quizResultsCollection);
       
       if (courseId) {
-        resultsQuery = query(resultsQuery, where("courseId", "==", courseId));
+        allResults = allResults.filter((result: any) => result.courseId === courseId);
       }
       
-      const resultsSnapshot = await getDocs(resultsQuery);
+      const completedResults = allResults.filter((result: any) => result.isCompleted);
       
-      // 3) Group results by quiz ID
-      const quizGroups: Record<string, any[]> = {};
+      // Group by course and calculate analytics
+      const analytics: QuizAnalytics[] = [];
+      const courseGroups = new Map<string, any[]>();
       
-      for (const resultDoc of resultsSnapshot.docs) {
-        const resultData = resultDoc.data();
-        const quizId = resultData.id;
-        
-        if (!quizGroups[quizId]) {
-          quizGroups[quizId] = [];
+      for (const result of completedResults) {
+        const key = result.courseId;
+        if (!courseGroups.has(key)) {
+          courseGroups.set(key, []);
         }
-        
-        quizGroups[quizId].push(resultData);
+        courseGroups.get(key)!.push(result);
       }
       
-      // 4) For each quiz, calculate analytics
-      const allAnalytics: QuizAnalytics[] = [];
-      
-      for (const [quizId, results] of Object.entries(quizGroups)) {
-        // Skip if no results
-        if (results.length === 0) continue;
+      for (const [courseId, results] of courseGroups) {
+        const scores = results.map((r: any) => r.score || 0);
+        const averageScore = scores.reduce((a, b) => a + b, 0) / scores.length;
         
-        // Use first result to get course info
-        const courseRef = doc(db, this.coursesCollection, results[0].courseId);
-        const courseDoc = await getDoc(courseRef);
-        const courseName = courseDoc.exists() ? (courseDoc.data() as Course).title : 'Unknown Course';
-        
-        // Calculate average score
-        const totalScore = results.reduce((sum, r) => sum + r.score, 0);
-        const averageScore = Math.round(totalScore / results.length);
-        
-        // Group attempts by date
-        const attemptsByDate: Record<string, number> = {};
-        for (const result of results) {
-          if (!result.attemptedAt) continue;
-          
-          const date = result.attemptedAt.toDate().toISOString().split('T')[0];
-          attemptsByDate[date] = (attemptsByDate[date] || 0) + 1;
-        }
-        
-        // Calculate score distribution
-        const scoreDistribution = {
-          excellent: 0, // 90-100%
-          good: 0,      // 70-89% 
-          average: 0,   // 50-69%
-          poor: 0       // 0-49%
-        };
-        
-        for (const result of results) {
-          const score = result.score;
-          if (score >= 90) scoreDistribution.excellent++;
-          else if (score >= 70) scoreDistribution.good++;
-          else if (score >= 50) scoreDistribution.average++;
-          else scoreDistribution.poor++;
-        }
-        
-        // Get user details and individual answers
-        const userResults: UserQuizResult[] = [];
-        for (const result of results) {
-          // Get user name
-          const userName = await this.getUserName(result.userId);
-          
-          // Get answers for this quiz attempt
-          const answersQuery = query(
-            collection(db, this.quizAnswersCollection),
-            where("quizResultId", "==", result.id)
-          );
-          const answersSnapshot = await getDocs(answersQuery);
-          
-          // Parse questions from JSON
-          const questions = this.deserializeQuestions(result.questionsJson);
-          
-          // Process answers
-          const answers: any[] = [];
-          answersSnapshot.forEach(answerDoc => {
-            const answerData = answerDoc.data();
-            const questionId = answerData.questionId;
-            
-            // Find question data
-            const questionData = questions.find(q => `q_${q.id}` === questionId);
-            if (!questionData) return;
-            
-            // Find selected and correct options
-            const selectedOptionId = answerData.selectedOptionId;
-            const selectedOption = questionData.options[selectedOptionId];
-            const correctOption = questionData.options.find(o => o.isCorrect);
-            
-            if (!selectedOption || !correctOption) return;
-            
-            answers.push({
-              questionId: questionId,
-              questionText: questionData.text,
-              selectedOption: selectedOption.text,
-              isCorrect: answerData.isCorrect,
-              correctOption: correctOption.text
-            });
-          });
-          
-          // Add to user results
-          userResults.push({
-            userId: result.userId,
-            userName: userName,
-            score: result.score,
-            timeTaken: result.attemptedAt && result.generatedAt ? 
-              result.attemptedAt.toDate().getTime() - result.generatedAt.toDate().getTime() : 0,
-            attemptedAt: result.attemptedAt ? result.attemptedAt.toDate() : null,
-            answers: answers
-          });
-        }
-        
-        // Calculate question analytics
-        const questionAnalytics: QuestionAnalytics[] = [];
-        const firstQuizResult = results[0];
-        if (firstQuizResult && firstQuizResult.questionsJson) {
-          const questions = this.deserializeQuestions(firstQuizResult.questionsJson);
-          
-          for (const question of questions) {
-            const questionId = `q_${question.id}`;
-            
-            // Count correct/incorrect answers for this question
-            let correctCount = 0;
-            let incorrectCount = 0;
-            const optionCounts: Record<number, number> = {};
-            
-            // Initialize option counts
-            question.options.forEach((_, index) => {
-              optionCounts[index] = 0;
-            });
-            
-            // Aggregate answers from all users
-            for (const userResult of userResults) {
-              const answer = userResult.answers.find(a => a.questionId === questionId);
-              if (answer) {
-                if (answer.isCorrect) correctCount++;
-                else incorrectCount++;
-                
-                // Find the option index
-                const optionIndex = question.options.findIndex(o => o.text === answer.selectedOption);
-                if (optionIndex >= 0) {
-                  optionCounts[optionIndex] = (optionCounts[optionIndex] || 0) + 1;
-                }
-              }
-            }
-            
-            const totalAnswers = correctCount + incorrectCount;
-            const correctPercentage = totalAnswers > 0 ? Math.round((correctCount / totalAnswers) * 100) : 0;
-            
-            // Find correct answer text
-            const correctOption = question.options.find(o => o.isCorrect);
-            
-            questionAnalytics.push({
-              questionId,
-              questionText: question.text,
-              correctAnswerText: correctOption?.text || 'Unknown',
-              correctCount,
-              incorrectCount,
-              correctPercentage,
-              optionCounts
-            });
-          }
-        }
-        
-        // Create the analytics object
-        const analytics: QuizAnalytics = {
-          quizId,
-          courseId: results[0].courseId,
-          courseName,
+        const course = await db.get(this.coursesCollection, courseId);
+        analytics.push({
+          quizId: `quiz_${courseId}`,
+          courseId,
+          courseName: course?.title || 'Unknown Course',
           totalAttempts: results.length,
-          averageScore,
-          questionAnalytics,
-          attemptsByDate,
-          scoreDistribution,
-          userResults,
-          lastUpdated: Timestamp.now()
-        };
-        
-        // Save to Firestore for future use
-        const analyticsRef = doc(db, this.quizAnalyticsCollection, quizId);
-        await setDoc(analyticsRef, analytics);
-        
-        allAnalytics.push(analytics);
+          averageScore: Math.round(averageScore * 100) / 100,
+          questionAnalytics: [],
+          attemptsByDate: {},
+          scoreDistribution: {
+            excellent: scores.filter(s => s >= 90).length,
+            good: scores.filter(s => s >= 70 && s < 90).length,
+            average: scores.filter(s => s >= 50 && s < 70).length,
+            poor: scores.filter(s => s < 50).length
+          },
+          userResults: [],
+          lastUpdated: new Date(Math.max(...results.map((r: any) => new Date(r.attemptedAt).getTime())))
+        });
       }
       
-      return allAnalytics;
+      return analytics;
     } catch (error) {
       console.error('Error getting quiz analytics:', error);
       throw new Error('Failed to get quiz analytics');
@@ -768,108 +461,40 @@ Make sure questions are varied and cover different sections of the content. The 
   
   /**
    * Get analytics for a specific course
-   * @param courseId The course ID
    */
   async getCourseQuizAnalytics(courseId: string): Promise<QuizAnalytics | null> {
     try {
-      const allAnalytics = await this.getQuizAnalytics(courseId);
-      return allAnalytics.length > 0 ? allAnalytics[0] : null;
+      const analytics = await this.getQuizAnalytics(courseId);
+      return analytics.length > 0 ? analytics[0] : null;
     } catch (error) {
       console.error('Error getting course quiz analytics:', error);
-      return null;
+      throw new Error('Failed to get course quiz analytics');
     }
   }
   
   /**
    * Get detailed user quiz history
-   * @param userId The user ID
-   * @param includeAnswers Whether to include detailed answer information
    */
   async getUserQuizHistory(userId: string, includeAnswers: boolean = false): Promise<any[]> {
     try {
-      const q = query(
-        collection(db, this.quizResultsCollection),
-        where("userId", "==", userId),
-        where("isCompleted", "==", true)
+      const results = await db.query(this.quizResultsCollection,
+        (item: any) => item.userId === userId
       );
       
-      const snapshot = await getDocs(q);
-      const results: any[] = [];
-      
-      for (const quizDoc of snapshot.docs) {
-        const quizData = quizDoc.data();
-        
-        // Get course name
-        const courseRef = doc(db, this.coursesCollection, quizData.courseId);
-        const courseDoc = await getDoc(courseRef);
-        const courseName = courseDoc.exists() ? (courseDoc.data() as Course).title : 'Unknown Course';
-        
-        // Calculate time taken
-        const generatedAt = quizData.generatedAt?.toDate();
-        const attemptedAt = quizData.attemptedAt?.toDate();
-        const timeTaken = generatedAt && attemptedAt ? 
-          attemptedAt.getTime() - generatedAt.getTime() : 0;
-          
-        // Build result object
-        const result: any = {
-          id: quizData.id,
-          courseId: quizData.courseId,
-          courseName: courseName,
-          score: quizData.score,
-          attemptedAt: attemptedAt,
-          timeTaken: timeTaken
-        };
-        
-        // Add answer details if requested
-        if (includeAnswers) {
-          // Get answer details
-          const answersQuery = query(
-            collection(db, this.quizAnswersCollection),
-            where("quizResultId", "==", quizData.id)
+      if (includeAnswers) {
+        // Add detailed answer information for each result
+        for (const result of results) {
+          const answers = await db.query(this.quizAnswersCollection,
+            (item: any) => item.quizResultId === result.id
           );
-          const answersSnapshot = await getDocs(answersQuery);
-          
-          // Parse questions
-          const questions = this.deserializeQuestions(quizData.questionsJson || '[]');
-          const answers: any[] = [];
-          
-          answersSnapshot.forEach(answerDoc => {
-            const answerData = answerDoc.data();
-            const questionId = answerData.questionId;
-            
-            // Find question
-            const questionData = questions.find(q => `q_${q.id}` === questionId);
-            if (!questionData) return;
-            
-            // Find option details
-            const selectedOptionId = answerData.selectedOptionId;
-            const selectedOption = questionData.options[selectedOptionId];
-            const correctOption = questionData.options.find(o => o.isCorrect);
-            
-            if (!selectedOption || !correctOption) return;
-            
-            answers.push({
-              questionId: questionId,
-              questionText: questionData.text,
-              selectedOption: selectedOption.text,
-              isCorrect: answerData.isCorrect,
-              correctOption: correctOption.text,
-              explanation: selectedOption.explanation
-            });
-          });
-          
           result.answers = answers;
         }
-        
-        results.push(result);
       }
       
-      // Sort by most recent first
-      return results.sort((a, b) => {
-        if (!a.attemptedAt || !b.attemptedAt) return 0;
-        return b.attemptedAt.getTime() - a.attemptedAt.getTime();
-      });
-      
+      return results.sort((a: any, b: any) => 
+        new Date(b.attemptedAt || b.generatedAt).getTime() - 
+        new Date(a.attemptedAt || a.generatedAt).getTime()
+      );
     } catch (error) {
       console.error('Error getting user quiz history:', error);
       throw new Error('Failed to get user quiz history');

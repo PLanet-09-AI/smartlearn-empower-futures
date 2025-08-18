@@ -1,22 +1,9 @@
-import { 
-  collection, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc, 
-  doc, 
-  getDocs, 
-  getDoc,
-  query,
-  where,
-  orderBy,
-  serverTimestamp,
-  limit
-} from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { db, serverTimestamp } from '@/lib/database';
 import { Course, CourseContent, Quiz } from '@/types';
+import { v4 as uuidv4 } from 'uuid';
 
-// Extended Course interface for Firestore
-interface FirestoreCourse extends Omit<Course, 'id'> {
+// Extended Course interface for IndexedDB
+interface DatabaseCourse extends Omit<Course, 'id'> {
   createdAt?: any;
   updatedAt?: any;
   createdBy?: string; // User ID of the creator
@@ -29,22 +16,18 @@ export class CourseService {
   // Create a new course
   async createCourse(course: Omit<Course, 'id'>, userId: string): Promise<{firebaseId: string, id: string}> {
     try {
-      const courseData: FirestoreCourse = {
+      const courseData: DatabaseCourse = {
         ...course,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
         createdBy: userId,
       };
 
-      // Save the course to Firebase
-      const docRef = await addDoc(collection(db, this.coursesCollection), courseData);
-      const firebaseId = docRef.id;
+      // Save the course to IndexedDB
+      const id = await db.add(this.coursesCollection, courseData);
       
-      // Use the Firebase ID as the course ID
-      const id = firebaseId;
-      
-      console.log("Course created successfully:", {firebaseId, id});
-      return {firebaseId, id};
+      console.log("Course created successfully:", {firebaseId: id, id});
+      return {firebaseId: id, id};
     } catch (error) {
       console.error('Error creating course:', error);
       throw new Error('Failed to create course');
@@ -52,30 +35,21 @@ export class CourseService {
   }
 
   // Update an existing course
-  async updateCourse(courseId: string, updates: Partial<Course>, userId: string): Promise<void> {
+  async updateCourse(courseId: string, updates: Partial<Course>): Promise<void> {
     try {
-      const courseRef = doc(db, this.coursesCollection, courseId);
+      const existingCourse = await db.get(this.coursesCollection, courseId);
       
-      // Get the course from Firebase
-      const courseDoc = await getDoc(courseRef);
-      if (!courseDoc.exists()) {
+      if (!existingCourse) {
         throw new Error('Course not found');
       }
-      
-      const courseData = courseDoc.data() as FirestoreCourse;
-      
-      // Skip strict permission check for admin role
-      if (courseData.createdBy && courseData.createdBy !== userId) {
-        console.log("User is updating a course they didn't create - assuming admin role");
-      }
 
-      const updateData = {
+      const updatedCourse = {
+        ...existingCourse,
         ...updates,
         updatedAt: serverTimestamp(),
       };
 
-      // Update the course in Firebase
-      await updateDoc(courseRef, updateData);
+      await db.update(this.coursesCollection, updatedCourse);
       console.log("Course updated successfully:", courseId);
     } catch (error) {
       console.error('Error updating course:', error);
@@ -84,25 +58,9 @@ export class CourseService {
   }
 
   // Delete a course
-  async deleteCourse(courseId: string, userId: string): Promise<void> {
+  async deleteCourse(courseId: string): Promise<void> {
     try {
-      const courseRef = doc(db, this.coursesCollection, courseId);
-      
-      // Get the course from Firebase
-      const courseDoc = await getDoc(courseRef);
-      if (!courseDoc.exists()) {
-        throw new Error('Course not found');
-      }
-      
-      const courseData = courseDoc.data() as FirestoreCourse;
-      
-      // Skip strict permission check for admin role
-      if (courseData.createdBy && courseData.createdBy !== userId) {
-        console.log("User is deleting a course they didn't create - assuming admin role");
-      }
-
-      // Delete the course from Firebase
-      await deleteDoc(courseRef);
+      await db.delete(this.coursesCollection, courseId);
       console.log("Course deleted successfully:", courseId);
     } catch (error) {
       console.error('Error deleting course:', error);
@@ -110,146 +68,137 @@ export class CourseService {
     }
   }
 
-  // Get all courses (published only for learners, all for educators/admins)
-  async getCourses(userRole: 'learner' | 'educator' | 'admin', userId?: string): Promise<Course[]> {
+  // Get all courses
+  async getCourses(filters?: {
+    category?: string;
+    level?: string;
+    status?: string;
+    limit?: number;
+  }): Promise<Course[]> {
     try {
-      let q;
+      let courses = await db.getAll(this.coursesCollection);
       
-      if (userRole === 'learner') {
-        // Learners only see published courses
-        q = query(
-          collection(db, this.coursesCollection),
-          where('status', '==', 'published'),
-          orderBy('createdAt', 'desc')
-        );
-      } else if (userRole === 'educator') {
-        // Educators see their own courses
-        q = query(
-          collection(db, this.coursesCollection),
-          where('createdBy', '==', userId),
-          orderBy('createdAt', 'desc')
-        );
-      } else {
-        // Admins see all courses (including unpublished)
-        q = query(
-          collection(db, this.coursesCollection),
-          orderBy('createdAt', 'desc')
-        );
+      // Apply filters
+      if (filters) {
+        if (filters.category) {
+          courses = courses.filter((course: any) => course.category === filters.category);
+        }
+        if (filters.level) {
+          courses = courses.filter((course: any) => course.level === filters.level);
+        }
+        if (filters.status) {
+          courses = courses.filter((course: any) => course.status === filters.status);
+        }
+        if (filters.limit) {
+          courses = courses.slice(0, filters.limit);
+        }
       }
-
-      const querySnapshot = await getDocs(q);
-      const courses: Course[] = [];
-
-      querySnapshot.forEach((doc) => {
-        const data = doc.data() as FirestoreCourse;
-        courses.push({
-          // Use the Firebase document ID as the main ID for consistency
-          id: doc.id, // Use Firebase ID as string
-          firebaseId: doc.id, // Store the Firebase document ID separately
-          ...data,
-        } as Course);
-      });
-
-      return courses;
+      
+      return courses.map((course: any) => ({
+        ...course,
+        id: course.id
+      }));
     } catch (error) {
-      console.error('Error fetching courses:', error);
-      throw new Error('Failed to fetch courses');
+      console.error('Error getting courses:', error);
+      throw new Error('Failed to get courses');
     }
   }
 
-  // Get a specific course by ID
+  // Get courses by category
+  async getCoursesByCategory(category: string): Promise<Course[]> {
+    return this.getCourses({ category });
+  }
+
+  // Get courses by level
+  async getCoursesByLevel(level: string): Promise<Course[]> {
+    return this.getCourses({ level });
+  }
+
+  // Get featured courses
+  async getFeaturedCourses(limit: number = 6): Promise<Course[]> {
+    try {
+      const courses = await db.getAll(this.coursesCollection);
+      
+      // Sort by rating and return top courses
+      const sortedCourses = courses
+        .filter((course: any) => course.status === 'published')
+        .sort((a: any, b: any) => (b.rating || 0) - (a.rating || 0))
+        .slice(0, limit);
+      
+      return sortedCourses.map((course: any) => ({
+        ...course,
+        id: course.id
+      }));
+    } catch (error) {
+      console.error('Error getting featured courses:', error);
+      throw new Error('Failed to get featured courses');
+    }
+  }
+
+  // Get a single course by ID
   async getCourse(courseId: string): Promise<Course | null> {
     try {
-      console.log("Getting course with ID:", courseId);
+      const courseData = await db.get(this.coursesCollection, courseId);
       
-      // Try direct Firebase lookup first - most efficient approach
-      const courseRef = doc(db, this.coursesCollection, courseId);
-      const courseDoc = await getDoc(courseRef);
-
-      if (courseDoc.exists()) {
-        console.log("Found course directly in Firebase:", courseId);
-        const data = courseDoc.data() as FirestoreCourse;
-        
-        // Ensure the course data has all required fields
-        if (!data.content) data.content = [];
-        if (!data.quiz) {
-          data.quiz = {
-            id: courseId,
-            title: `${data.title || 'Course'} Quiz`,
-            questions: []
-          };
-        }
-        
-        return {
-          id: courseId, // Use Firebase ID as string
-          firebaseId: courseId, // Store the Firebase document ID
-          ...data,
-        } as Course;
+      if (!courseData) {
+        return null;
       }
       
-      // If not found by direct ID, check other courses
-      // This is for backward compatibility with existing code that might use different ID formats
-      // Get all courses to search through
-      const allCourses = await this.getCourses('admin');
-      console.log(`Searching among ${allCourses.length} courses for ID ${courseId}...`);
-      
-      // Look for a course with that ID
-      const courseById = allCourses.find(course => course.id === courseId);
-      if (courseById) {
-        console.log("Found course by numeric ID:", courseById);
-        return courseById;
-      }
-      
-      console.log("Course not found:", courseId);
-      return null;
+      return {
+        ...courseData,
+        id: courseId
+      };
     } catch (error) {
-      console.error('Error fetching course:', error);
-      throw new Error('Failed to fetch course');
+      console.error('Error getting course:', error);
+      throw new Error('Failed to get course');
+    }
+  }
+
+  // Search courses by title or description
+  async searchCourses(searchTerm: string): Promise<Course[]> {
+    try {
+      const courses = await db.getAll(this.coursesCollection);
+      
+      const searchResults = courses.filter((course: any) => {
+        const titleMatch = course.title?.toLowerCase().includes(searchTerm.toLowerCase());
+        const descMatch = course.description?.toLowerCase().includes(searchTerm.toLowerCase());
+        return titleMatch || descMatch;
+      });
+      
+      return searchResults.map((course: any) => ({
+        ...course,
+        id: course.id
+      }));
+    } catch (error) {
+      console.error('Error searching courses:', error);
+      throw new Error('Failed to search courses');
     }
   }
 
   // Add content to a course
-  async addCourseContent(
-    courseId: string, 
-    content: Omit<CourseContent, 'id'>, 
-    userId: string
-  ): Promise<CourseContent> {
+  async addCourseContent(courseId: string, content: Omit<CourseContent, 'id'>): Promise<string> {
     try {
-      console.log("Adding content to course with ID:", courseId);
-      console.log("Content to add:", content);
+      const course = await db.get(this.coursesCollection, courseId);
       
-      // Get the course from Firebase
-      const courseRef = doc(db, this.coursesCollection, courseId);
-      const courseDoc = await getDoc(courseRef);
-
-      if (!courseDoc.exists()) {
+      if (!course) {
         throw new Error('Course not found');
       }
-      
-      console.log("Course found in Firebase:", courseId);
-      const courseData = courseDoc.data() as FirestoreCourse;
-      
-      // Check permission if the course has a createdBy field
-      if (courseData.createdBy && courseData.createdBy !== userId) {
-        console.log("User is adding content to a course they didn't create - assuming admin role");
-      }
 
-      // Create new content with a unique ID
       const newContent: CourseContent = {
-        id: Date.now().toString(),
         ...content,
+        id: uuidv4()
       };
 
-      const updatedContent = [...(courseData.content || []), newContent];
+      const updatedCourse = {
+        ...course,
+        content: [...(course.content || []), newContent],
+        updatedAt: serverTimestamp()
+      };
 
-      // Update the course in Firebase
-      await updateDoc(courseRef, {
-        content: updatedContent,
-        updatedAt: serverTimestamp(),
-      });
+      await db.update(this.coursesCollection, updatedCourse);
       
-      console.log("Content added to Firebase course successfully");
-      return newContent;
+      console.log("Content added to course:", courseId);
+      return newContent.id;
     } catch (error) {
       console.error('Error adding course content:', error);
       throw new Error('Failed to add course content');
@@ -257,296 +206,214 @@ export class CourseService {
   }
 
   // Update course content
-  async updateCourseContent(
-    courseId: string,
-    content: CourseContent,
-    userId: string
-  ): Promise<void> {
+  async updateCourseContent(courseId: string, contentId: string, updates: Partial<CourseContent>): Promise<void> {
     try {
-      console.log("Updating content in course with ID:", courseId);
-      console.log("Content to update:", content);
+      const course = await db.get(this.coursesCollection, courseId);
       
-      const courseRef = doc(db, this.coursesCollection, courseId);
-      const courseDoc = await getDoc(courseRef);
-
-      if (!courseDoc.exists()) {
+      if (!course) {
         throw new Error('Course not found');
       }
 
-      const courseData = courseDoc.data() as FirestoreCourse;
-      
-      // Skip permission check for admin role
-      if (courseData.createdBy && courseData.createdBy !== userId) {
-        console.log("User is updating content they didn't create - assuming admin role");
+      const contentIndex = course.content?.findIndex((item: CourseContent) => item.id === contentId);
+      if (contentIndex === -1) {
+        throw new Error('Content not found');
       }
 
-      const updatedContent = (courseData.content || []).map(item =>
-        item.id === content.id ? content : item
-      );
+      const updatedContent = [...(course.content || [])];
+      updatedContent[contentIndex] = { ...updatedContent[contentIndex], ...updates };
 
-      // Log the content that's going to be updated
-      console.log("Content before update:", courseData.content);
-      console.log("Updated content item:", content);
-      console.log("Content after update:", updatedContent);
-      
-      await updateDoc(courseRef, {
+      const updatedCourse = {
+        ...course,
         content: updatedContent,
-        updatedAt: serverTimestamp(),
-      });
+        updatedAt: serverTimestamp()
+      };
+
+      await db.update(this.coursesCollection, updatedCourse);
       
-      console.log("Course content updated successfully in Firebase");
+      console.log("Course content updated:", contentId);
     } catch (error) {
       console.error('Error updating course content:', error);
       throw new Error('Failed to update course content');
     }
   }
 
-  // Update the order of course content
-  async updateCourseContentOrder(
-    courseId: string,
-    reorderedContent: CourseContent[],
-    userId: string
-  ): Promise<void> {
-    try {
-      console.log("Updating content order for course with ID:", courseId);
-      
-      const courseRef = doc(db, this.coursesCollection, courseId);
-      const courseDoc = await getDoc(courseRef);
-
-      if (!courseDoc.exists()) {
-        throw new Error('Course not found');
-      }
-
-      const courseData = courseDoc.data() as FirestoreCourse;
-      
-      // Skip strict permission check for admin role
-      if (courseData.createdBy && courseData.createdBy !== userId) {
-        console.log("User is reordering content they didn't create - assuming admin role");
-      }
-
-      // Update the content array with the new order
-      await updateDoc(courseRef, {
-        content: reorderedContent,
-        updatedAt: serverTimestamp(),
-      });
-      
-      console.log("Content order updated successfully");
-    } catch (error) {
-      console.error('Error updating course content order:', error);
-      throw new Error('Failed to update course content order');
-    }
-  }
-
   // Delete course content
-  async deleteCourseContent(
-    courseId: string,
-    contentId: string,
-    userId: string
-  ): Promise<void> {
+  async deleteCourseContent(courseId: string, contentId: string): Promise<void> {
     try {
-      console.log("Deleting content from course with ID:", courseId);
-      console.log("Content ID to delete:", contentId);
+      const course = await db.get(this.coursesCollection, courseId);
       
-      const courseRef = doc(db, this.coursesCollection, courseId);
-      const courseDoc = await getDoc(courseRef);
-
-      if (!courseDoc.exists()) {
+      if (!course) {
         throw new Error('Course not found');
       }
 
-      const courseData = courseDoc.data() as FirestoreCourse;
-      
-      // Skip strict permission check for admin role
-      if (courseData.createdBy && courseData.createdBy !== userId) {
-        console.log("User is deleting content they didn't create - assuming admin role");
-      }
+      const updatedContent = course.content?.filter((item: CourseContent) => item.id !== contentId) || [];
 
-      const updatedContent = (courseData.content || []).filter(item => 
-        item.id !== contentId
-      );
-
-      await updateDoc(courseRef, {
+      const updatedCourse = {
+        ...course,
         content: updatedContent,
-        updatedAt: serverTimestamp(),
-      });
+        updatedAt: serverTimestamp()
+      };
+
+      await db.update(this.coursesCollection, updatedCourse);
       
-      console.log("Content deleted successfully");
+      console.log("Course content deleted:", contentId);
     } catch (error) {
       console.error('Error deleting course content:', error);
       throw new Error('Failed to delete course content');
     }
   }
 
-  // Update course quiz
-  async updateCourseQuiz(
-    courseId: string,
-    quiz: Quiz,
-    userId: string
-  ): Promise<void> {
+  // Add/Update quiz for a course
+  async updateCourseQuiz(courseId: string, quiz: Quiz): Promise<void> {
     try {
-      console.log("Updating quiz for course with ID:", courseId);
+      const course = await db.get(this.coursesCollection, courseId);
       
-      // Get the course directly from Firebase
-      const courseRef = doc(db, this.coursesCollection, courseId);
-      const courseDoc = await getDoc(courseRef);
-
-      if (!courseDoc.exists()) {
+      if (!course) {
         throw new Error('Course not found');
       }
 
-      const courseData = courseDoc.data() as FirestoreCourse;
-      
-      // Skip strict permission check for admin role
-      if (courseData.createdBy && courseData.createdBy !== userId) {
-        console.log("User is updating quiz for a course they didn't create - assuming admin role");
-      }
+      const updatedCourse = {
+        ...course,
+        quiz: quiz,
+        updatedAt: serverTimestamp()
+      };
 
-      // Update the quiz in Firebase
-      await updateDoc(courseRef, {
-        quiz,
-        updatedAt: serverTimestamp(),
-      });
+      await db.update(this.coursesCollection, updatedCourse);
       
-      console.log("Quiz updated successfully for course:", courseId);
+      console.log("Quiz updated for course:", courseId);
     } catch (error) {
       console.error('Error updating course quiz:', error);
       throw new Error('Failed to update course quiz');
     }
   }
 
-  // Publish/unpublish a course
-  async updateCourseStatus(
-    courseId: string,
-    status: 'draft' | 'published' | 'archived',
-    userId: string
-  ): Promise<void> {
+  // Get quiz for a course
+  async getCourseQuiz(courseId: string): Promise<Quiz | null> {
     try {
-      const courseRef = doc(db, this.coursesCollection, courseId);
-      const courseDoc = await getDoc(courseRef);
-
-      if (!courseDoc.exists()) {
-        throw new Error('Course not found');
-      }
-
-      const courseData = courseDoc.data() as FirestoreCourse;
+      const course = await db.get(this.coursesCollection, courseId);
       
-      // Skip strict permission check for admin role
-      if (courseData.createdBy && courseData.createdBy !== userId) {
-        console.log("User is changing status of a course they didn't create - assuming admin role");
+      if (!course || !course.quiz) {
+        return null;
       }
-
-      // Update the course status
-      await updateDoc(courseRef, {
-        status,
-        updatedAt: serverTimestamp(),
-      });
       
-      console.log(`Course status updated to ${status}:`, courseId);
+      return course.quiz;
     } catch (error) {
-      console.error('Error updating course status:', error);
-      throw new Error('Failed to update course status');
+      console.error('Error getting course quiz:', error);
+      throw new Error('Failed to get course quiz');
     }
   }
 
-  // Delete a quiz from a course
-  async deleteCourseQuiz(
-    courseId: string,
-    quizId: string,
-    userId: string
-  ): Promise<void> {
+  // Update course rating
+  async updateCourseRating(courseId: string, newRating: number, newRatingCount: number): Promise<void> {
     try {
-      console.log("Deleting quiz from course with ID:", courseId);
+      const course = await db.get(this.coursesCollection, courseId);
       
-      const courseRef = doc(db, this.coursesCollection, courseId);
-      const courseDoc = await getDoc(courseRef);
-
-      if (!courseDoc.exists()) {
+      if (!course) {
         throw new Error('Course not found');
       }
 
-      const courseData = courseDoc.data() as FirestoreCourse;
-      
-      // Skip strict permission check for admin role
-      if (courseData.createdBy && courseData.createdBy !== userId) {
-        console.log("User is deleting quiz from a course they didn't create - assuming admin role");
-      }
-
-      // Remove the quiz by setting it to an empty quiz
-      const emptyQuiz = {
-        id: quizId,
-        title: `${courseData.title} Quiz`,
-        questions: []
+      const updatedCourse = {
+        ...course,
+        rating: newRating,
+        ratingCount: newRatingCount,
+        updatedAt: serverTimestamp()
       };
 
-      await updateDoc(courseRef, {
-        quiz: emptyQuiz,
-        updatedAt: serverTimestamp(),
-      });
+      await db.update(this.coursesCollection, updatedCourse);
       
-      console.log("Quiz deleted successfully from course:", courseId);
+      console.log("Course rating updated:", courseId);
     } catch (error) {
-      console.error('Error deleting course quiz:', error);
-      throw new Error('Failed to delete course quiz');
+      console.error('Error updating course rating:', error);
+      throw new Error('Failed to update course rating');
     }
   }
-  
-  // Get enrolled courses for a user
-  async getEnrolledCourses(userId: string): Promise<Course[]> {
+
+  // Get courses for a specific instructor
+  async getInstructorCourses(instructorId: string): Promise<Course[]> {
     try {
-      // Query user enrollments collection
-      const enrollmentsRef = collection(db, "enrollments");
-      const q = query(enrollmentsRef, where("userId", "==", userId));
-      const querySnapshot = await getDocs(q);
+      const courses = await db.query(this.coursesCollection, 
+        (course: any) => course.createdBy === instructorId
+      );
       
-      // Extract course IDs from enrollments
-      const courseIds = querySnapshot.docs.map(doc => doc.data().courseId);
-      
-      // Get course details for each enrollment
-      const coursesPromises = courseIds.map(async (courseId) => {
-        const courseDoc = await getDoc(doc(db, this.coursesCollection, courseId));
-        if (courseDoc.exists()) {
-          return {
-            ...courseDoc.data(),
-            id: courseDoc.id,
-            firebaseId: courseDoc.id
-          } as Course;
-        }
-        return null;
-      });
-      
-      const courses = await Promise.all(coursesPromises);
-      return courses.filter(course => course !== null) as Course[];
+      return courses.map((course: any) => ({
+        ...course,
+        id: course.id
+      }));
     } catch (error) {
-      console.error("Error getting enrolled courses:", error);
-      throw error;
+      console.error('Error getting instructor courses:', error);
+      throw new Error('Failed to get instructor courses');
+    }
+  }
+
+  // Get course statistics
+  async getCourseStats(courseId: string): Promise<{
+    enrollmentCount: number;
+    completionCount: number;
+    averageRating: number;
+    totalRatings: number;
+  }> {
+    try {
+      const enrollments = await db.query('enrollments', 
+        (enrollment: any) => enrollment.courseId === courseId
+      );
+      
+      const course = await db.get(this.coursesCollection, courseId);
+      
+      const completedEnrollments = enrollments.filter((enrollment: any) => enrollment.completed);
+      
+      return {
+        enrollmentCount: enrollments.length,
+        completionCount: completedEnrollments.length,
+        averageRating: course?.rating || 0,
+        totalRatings: course?.ratingCount || 0
+      };
+    } catch (error) {
+      console.error('Error getting course stats:', error);
+      throw new Error('Failed to get course stats');
+    }
+  }
+
+  // Test database connection
+  async testConnection(): Promise<boolean> {
+    try {
+      // Try to get all courses (this will test if IndexedDB is working)
+      await db.getAll(this.coursesCollection);
+      return true;
+    } catch (error) {
+      console.error('Database connection test failed:', error);
+      return false;
+    }
+  }
+
+  // Get course categories (dynamic from existing courses)
+  async getCourseCategories(): Promise<string[]> {
+    try {
+      const courses = await db.getAll(this.coursesCollection);
+      const categories = [...new Set(courses.map((course: any) => course.category))];
+      return categories.filter(Boolean);
+    } catch (error) {
+      console.error('Error getting course categories:', error);
+      throw new Error('Failed to get course categories');
+    }
+  }
+
+  // Batch create courses (useful for seeding)
+  async batchCreateCourses(courses: Omit<Course, 'id'>[], userId: string): Promise<string[]> {
+    try {
+      const courseIds: string[] = [];
+      
+      for (const course of courses) {
+        const result = await this.createCourse(course, userId);
+        courseIds.push(result.id);
+      }
+      
+      console.log(`Batch created ${courseIds.length} courses`);
+      return courseIds;
+    } catch (error) {
+      console.error('Error batch creating courses:', error);
+      throw new Error('Failed to batch create courses');
     }
   }
 }
 
-// Test Firebase connectivity and course operations
-async function testFirebaseConnection(): Promise<boolean> {
-  try {
-    // Check if we can connect to Firestore
-    const testQuery = query(collection(db, 'courses'), orderBy('createdAt', 'desc'), limit(1));
-    const querySnapshot = await getDocs(testQuery);
-    
-    console.log(`Firebase connection test: ${querySnapshot.empty ? 'No courses found' : 'Connection successful'}`);
-    return true;
-  } catch (error) {
-    console.error('Firebase connection test failed:', error);
-    return false;
-  }
-}
-
-// Initialize service instance
 export const courseService = new CourseService();
-
-// Run connectivity test on service initialization
-testFirebaseConnection()
-  .then(connected => {
-    if (connected) {
-      console.log('Firebase is properly connected and ready to use');
-    } else {
-      console.error('Firebase connection is not working properly. Check your configuration.');
-    }
-  });

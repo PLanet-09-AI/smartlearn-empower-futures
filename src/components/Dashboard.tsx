@@ -54,7 +54,7 @@ import CourseLibrary from "./CourseLibrary";
 import CourseContent from "./CourseContent";
 import CourseManagement from "./CourseManagement";
 import VoiceCommand from "./VoiceCommand";
-import FirebaseDebugger from "./FirebaseDebugger";
+import DatabaseDebugger from "./DatabaseDebugger";
 import UserManagement from "./UserManagement";
 import AnalyticsDashboard from "./AnalyticsDashboard";
 import { courseService } from "@/services/courseService";
@@ -379,7 +379,7 @@ const Dashboard = ({ userRole }: DashboardProps) => {
             <TabsContent value="debug">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <FirebaseDebugger />
+                  <DatabaseDebugger />
                 </div>
                 <Card>
                   <CardHeader>
