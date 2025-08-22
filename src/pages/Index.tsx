@@ -1,49 +1,37 @@
 
 import Header from "@/components/Header";
-import LoginForm from "@/components/LoginForm";
-import Dashboard from "@/components/Dashboard";
 import Homepage from "@/components/Homepage";
 import { useAuth } from "@/contexts/AuthContext";
-import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useEffect } from "react";
 
 const Index = () => {
-  const { currentUser, userProfile, logout } = useAuth();
-  const [showLogin, setShowLogin] = useState(false);
+  const { currentUser, logout } = useAuth();
+  const navigate = useNavigate();
+
+  // Redirect authenticated users to dashboard
+  useEffect(() => {
+    if (currentUser) {
+      navigate('/dashboard');
+    }
+  }, [currentUser, navigate]);
 
   const handleGetStarted = () => {
-    setShowLogin(true);
+    navigate('/login');
   };
 
-  const handleBackToHome = () => {
-    setShowLogin(false);
-  };
+  // Don't render anything if user is authenticated (will redirect)
+  if (currentUser) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50">
       <Header 
-        isLoggedIn={!!currentUser} 
+        isLoggedIn={false} 
         onLogout={logout}
       />
-      
-      {!currentUser ? (
-        showLogin ? (
-          <div>
-            <div className="p-4">
-              <button 
-                onClick={handleBackToHome}
-                className="text-blue-600 hover:text-blue-800 font-medium"
-              >
-                ← Back to Home
-              </button>
-            </div>
-            <LoginForm />
-          </div>
-        ) : (
-          <Homepage onGetStarted={handleGetStarted} />
-        )
-      ) : (
-        <Dashboard userRole={userProfile?.role || 'learner'} />
-      )}
+      <Homepage onGetStarted={handleGetStarted} />
     </div>
   );
 };

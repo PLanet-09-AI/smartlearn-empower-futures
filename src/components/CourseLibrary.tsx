@@ -47,10 +47,11 @@ interface Course {
 interface CourseLibraryProps {
   userRole: 'learner' | 'educator' | 'admin';
   onCourseSelect: (courseId: string) => void;
+  onTakeQuiz?: (courseId: string) => void;
   courses: Course[];
 }
 
-const CourseLibrary = ({ userRole, onCourseSelect, courses }: CourseLibraryProps) => {
+const CourseLibrary = ({ userRole, onCourseSelect, onTakeQuiz, courses }: CourseLibraryProps) => {
   const { currentUser } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");

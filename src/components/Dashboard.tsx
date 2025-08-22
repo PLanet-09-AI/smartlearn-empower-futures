@@ -60,6 +60,7 @@ import AnalyticsDashboard from "./AnalyticsDashboard";
 import { courseService } from "@/services/courseService";
 import { useAuth } from "@/contexts/AuthContext";
 import { Course } from "@/types";
+import { useNavigate } from "react-router-dom";
 
 interface DashboardProps {
   userRole: 'learner' | 'educator' | 'admin';
@@ -67,8 +68,8 @@ interface DashboardProps {
 
 const Dashboard = ({ userRole }: DashboardProps) => {
   const { currentUser } = useAuth();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("courses");
-  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -78,7 +79,7 @@ const Dashboard = ({ userRole }: DashboardProps) => {
       setLoading(true);
       try {
         // Use admin role to get all courses for the dashboard
-        const firebaseCourses = await courseService.getCourses(userRole, currentUser?.uid);
+        const firebaseCourses = await courseService.getCourses();
         console.log("Loaded courses from Firebase:", firebaseCourses.length);
         
         // Verify each course has expected data structure
@@ -207,23 +208,16 @@ const Dashboard = ({ userRole }: DashboardProps) => {
   };
 
   const handleCourseSelect = (courseId: string) => {
-    // Find the course to check if it has a Firebase ID
-    const selectedCourse = courses.find(course => course.id === courseId);
-    if (selectedCourse) {
-      console.log("Selected course:", selectedCourse);
-      setSelectedCourseId(courseId);
-      setActiveTab("course-content");
-    }
+    navigate(`/course/${courseId}`);
+  };
+
+  const handleTakeQuiz = (courseId: string) => {
+    navigate(`/quiz/${courseId}`);
   };
 
   const handleCoursesUpdate = (updatedCourses: Course[]) => {
     console.log('Dashboard: Updating courses with:', updatedCourses);
     setCourses(updatedCourses);
-  };
-
-  const handleBackToCourses = () => {
-    setSelectedCourseId(null);
-    setActiveTab("courses");
   };
 
   // Quick stats based on user role with dynamic data
@@ -260,21 +254,6 @@ const Dashboard = ({ userRole }: DashboardProps) => {
     if (userRole === 'educator') return "Manage your courses and students";
     return "Oversee the entire platform";
   };
-
-  if (selectedCourseId) {
-    // Find the course to get the Firebase ID if available
-    const selectedCourse = courses.find(course => course.id === selectedCourseId);
-    
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <CourseContent 
-          courseId={selectedCourseId} 
-          onBack={handleBackToCourses}
-          userRole={userRole}
-        />
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -338,6 +317,7 @@ const Dashboard = ({ userRole }: DashboardProps) => {
             <CourseLibrary 
               userRole={userRole} 
               onCourseSelect={handleCourseSelect}
+              onTakeQuiz={handleTakeQuiz}
               courses={courses}
             />
           </TabsContent>
