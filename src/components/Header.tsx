@@ -2,6 +2,7 @@
 import { GraduationCap, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import DatabaseStatus from "./DatabaseStatus";
+import ModelSelector from "./ModelSelector";
 
 interface HeaderProps {
   isLoggedIn: boolean;
@@ -34,17 +35,22 @@ const Header = ({ isLoggedIn, onLogout }: HeaderProps) => {
             </div>
           </div>
           
-          {isLoggedIn && (
-            <Button
-              onClick={handleLogout}
-              variant="outline"
-              size="sm"
-              className="flex items-center space-x-2"
-            >
-              <LogOut className="h-4 w-4" />
-              <span>Logout</span>
-            </Button>
-          )}
+          <div className="flex items-center space-x-4">
+            {isLoggedIn && (
+              <>
+                <ModelSelector />
+                <Button
+                  onClick={handleLogout}
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center space-x-2"
+                >
+                  <LogOut className="h-4 w-4" />
+                  <span>Logout</span>
+                </Button>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </header>

@@ -95,12 +95,24 @@ Make sure questions are varied and cover different sections of the content. The 
       // Parse and clean up the JSON response
       const questionsData = this.deserializeQuestions(questionsJson);
       
+      // Try to auto-fix common AI model issues
+      const fixedQuestionsData = this.attemptAutoFix(questionsData);
+      
+      // Validate the parsed questions before creating the quiz
+      const validationResult = this.validateQuizQuestions(fixedQuestionsData);
+      if (!validationResult.isValid) {
+        console.error('❌ Quiz validation failed:', validationResult.errors);
+        console.error('📋 Raw AI response that failed validation:', questionsJson);
+        console.error('🔍 Parsed questions data:', JSON.stringify(fixedQuestionsData, null, 2));
+        throw new Error(`Invalid quiz generated: ${validationResult.errors.join(', ')}`);
+      }
+      
       // Create a new quiz object
       const quiz: Quiz = {
         id: `quiz_ai_${Date.now()}`,
         title: `AI Quiz: ${courseData.title}`,
         courseId: courseId,
-        questions: questionsData.map(q => ({
+        questions: fixedQuestionsData.map(q => ({
           id: `q_${q.id}`,
           question: q.text,
           options: q.options.map(o => o.text),
@@ -108,6 +120,13 @@ Make sure questions are varied and cover different sections of the content. The 
           explanation: q.options.find(o => o.isCorrect)?.explanation || ''
         }))
       };
+
+      // Final validation on the created quiz object
+      const finalValidation = this.validateFinalQuiz(quiz);
+      if (!finalValidation.isValid) {
+        console.error('❌ Final quiz validation failed:', finalValidation.errors);
+        throw new Error(`Quiz structure invalid: ${finalValidation.errors.join(', ')}`);
+      }
 
       // Create a quiz result record for tracking this attempt
       const quizResultId = await db.add(this.quizResultsCollection, {
@@ -309,7 +328,75 @@ Make sure questions are varied and cover different sections of the content. The 
   }
 
   /**
-   * Parse and clean the JSON response from Ollama
+   * Attempt to automatically fix common AI model response issues
+   */
+  private attemptAutoFix(questionsData: Array<any>): Array<any> {
+    console.log('🔧 Attempting to auto-fix common AI response issues...');
+    
+    const fixedQuestions = questionsData.map((question, qIndex) => {
+      if (!question.options || !Array.isArray(question.options)) {
+        return question; // Skip if no options
+      }
+      
+      const correctCount = question.options.filter((opt: any) => opt.isCorrect === true).length;
+      
+      // Fix 1: If no correct answers, try to infer the correct one
+      if (correctCount === 0) {
+        console.log(`🔧 Question ${qIndex + 1}: No correct answer found, attempting to infer...`);
+        
+        // Strategy 1: Look for explanations that suggest correct answers
+        let inferredCorrect = -1;
+        question.options.forEach((option: any, optIndex: number) => {
+          if (option.explanation && 
+              (option.explanation.toLowerCase().includes('correct') ||
+               option.explanation.toLowerCase().includes('right answer') ||
+               option.explanation.toLowerCase().includes('this is because'))) {
+            inferredCorrect = optIndex;
+          }
+        });
+        
+        // Strategy 2: If still no luck, pick the first option as correct
+        // (This is a last resort and will be logged as a warning)
+        if (inferredCorrect === -1) {
+          inferredCorrect = 0;
+          console.warn(`⚠️ Question ${qIndex + 1}: Could not infer correct answer, defaulting to first option`);
+        }
+        
+        // Apply the fix
+        question.options.forEach((option: any, optIndex: number) => {
+          option.isCorrect = optIndex === inferredCorrect;
+        });
+        
+        console.log(`✅ Question ${qIndex + 1}: Set option ${inferredCorrect + 1} as correct`);
+      }
+      
+      // Fix 2: If multiple correct answers, keep only the first one
+      else if (correctCount > 1) {
+        console.log(`🔧 Question ${qIndex + 1}: Multiple correct answers found (${correctCount}), keeping first one...`);
+        
+        let firstCorrectFound = false;
+        question.options.forEach((option: any) => {
+          if (option.isCorrect === true) {
+            if (firstCorrectFound) {
+              option.isCorrect = false; // Set subsequent ones to false
+            } else {
+              firstCorrectFound = true; // Keep the first one
+            }
+          }
+        });
+        
+        console.log(`✅ Question ${qIndex + 1}: Fixed multiple correct answers`);
+      }
+      
+      return question;
+    });
+    
+    console.log('🔧 Auto-fix process completed');
+    return fixedQuestions;
+  }
+
+  /**
+   * Parse and clean the JSON response from Ollama/different models
    */
   private deserializeQuestions(rawJson: string): Array<{
     id: number;
@@ -322,24 +409,267 @@ Make sure questions are varied and cover different sections of the content. The 
     }>;
   }> {
     try {
-      // Clean up the JSON string - remove markdown code blocks if present
-      let clean = rawJson.replace(/^```(?:json)?\s*|\s*```$/g, '').trim();
+      console.log('🔍 Raw response received:', rawJson.substring(0, 200) + '...');
       
-      // Ensure it starts with an array
+      let clean = rawJson.trim();
+      
+      // Step 1: Remove markdown code blocks (more comprehensive)
+      // Handle cases like ```json\n...\n``` or ```\n...\n```
+      clean = clean.replace(/^```(?:json|JSON)?\s*\n?/gm, '');
+      clean = clean.replace(/\n?\s*```\s*$/gm, '');
+      
+      // Step 2: Look for JSON array in the response
+      const arrayMatch = clean.match(/\[[\s\S]*\]/);
+      if (arrayMatch) {
+        clean = arrayMatch[0];
+      } else {
+        // If no array found, try to extract everything between first [ and last ]
+        const start = clean.indexOf('[');
+        const end = clean.lastIndexOf(']');
+        if (start !== -1 && end !== -1 && end > start) {
+          clean = clean.substring(start, end + 1);
+        }
+      }
+      
+      // Step 3: Clean up common JSON issues
+      // Remove trailing commas
+      clean = clean.replace(/,\s*([}\]])/g, '$1');
+      // Fix common escaping issues
+      clean = clean.replace(/\\n/g, '\\\\n');
+      
+      // Step 4: Ensure it starts with an array
       if (!clean.startsWith('[')) {
         clean = '[' + clean + ']';
       }
       
-      // Remove trailing commas which can cause JSON parse errors
-      clean = clean.replace(/,\s*([}\]])/g, '$1');
+      console.log('🧹 Cleaned JSON:', clean.substring(0, 200) + '...');
       
-      // Parse the JSON
+      // Step 5: Parse the JSON
       const parsed = JSON.parse(clean);
-      return Array.isArray(parsed) ? parsed : [];
+      const result = Array.isArray(parsed) ? parsed : [];
+      
+      console.log(`✅ Successfully parsed ${result.length} questions`);
+      return result;
+      
     } catch (error) {
-      console.error('Error parsing quiz questions JSON:', error);
-      return [];
+      console.error('❌ Error parsing quiz questions JSON:', error);
+      console.error('📋 Raw input was:', rawJson);
+      
+      // Fallback: try to extract questions manually if JSON parsing fails
+      try {
+        return this.fallbackQuestionExtraction(rawJson);
+      } catch (fallbackError) {
+        console.error('❌ Fallback extraction also failed:', fallbackError);
+        return [];
+      }
     }
+  }
+
+  /**
+   * Validate raw quiz questions data from AI response
+   */
+  private validateQuizQuestions(questionsData: Array<any>): { isValid: boolean; errors: string[] } {
+    const errors: string[] = [];
+    
+    // Check if we have any questions at all
+    if (!questionsData || questionsData.length === 0) {
+      errors.push("No questions were generated");
+      return { isValid: false, errors };
+    }
+    
+    // Validate each question
+    questionsData.forEach((question, index) => {
+      const questionNum = index + 1;
+      
+      // Check question structure
+      if (!question.id) {
+        errors.push(`Question ${questionNum}: Missing ID`);
+      }
+      
+      if (!question.text || typeof question.text !== 'string' || question.text.trim().length === 0) {
+        errors.push(`Question ${questionNum}: Missing or invalid question text`);
+      }
+      
+      if (!question.options || !Array.isArray(question.options)) {
+        errors.push(`Question ${questionNum}: Missing or invalid options array`);
+        return; // Skip further validation for this question
+      }
+      
+      // Check minimum number of options
+      if (question.options.length < 2) {
+        errors.push(`Question ${questionNum}: Must have at least 2 options (has ${question.options.length})`);
+      }
+      
+      // Check maximum number of options (reasonable limit)
+      if (question.options.length > 10) {
+        errors.push(`Question ${questionNum}: Too many options (${question.options.length}), maximum is 10`);
+      }
+      
+      // Validate options and check for correct answers
+      let correctAnswerCount = 0;
+      question.options.forEach((option: any, optIndex: number) => {
+        const optionNum = optIndex + 1;
+        
+        if (!option.id) {
+          errors.push(`Question ${questionNum}, Option ${optionNum}: Missing ID`);
+        }
+        
+        if (!option.text || typeof option.text !== 'string' || option.text.trim().length === 0) {
+          errors.push(`Question ${questionNum}, Option ${optionNum}: Missing or invalid option text`);
+        }
+        
+        if (typeof option.isCorrect !== 'boolean') {
+          errors.push(`Question ${questionNum}, Option ${optionNum}: Missing or invalid isCorrect property`);
+        }
+        
+        if (option.isCorrect === true) {
+          correctAnswerCount++;
+        }
+        
+        // Check for explanation on correct answer
+        if (option.isCorrect && (!option.explanation || typeof option.explanation !== 'string' || option.explanation.trim().length === 0)) {
+          errors.push(`Question ${questionNum}, Option ${optionNum}: Correct answer missing explanation`);
+        }
+      });
+      
+      // Validate correct answer count
+      if (correctAnswerCount === 0) {
+        errors.push(`Question ${questionNum}: No correct answer specified (all options marked as false)`);
+      } else if (correctAnswerCount > 1) {
+        errors.push(`Question ${questionNum}: Multiple correct answers specified (${correctAnswerCount}), only one allowed`);
+      }
+    });
+    
+    console.log(`🔍 Question validation: ${errors.length === 0 ? 'PASSED' : 'FAILED'}`);
+    if (errors.length > 0) {
+      console.log('❌ Validation errors:', errors);
+    }
+    
+    return {
+      isValid: errors.length === 0,
+      errors
+    };
+  }
+
+  /**
+   * Validate the final Quiz object structure
+   */
+  private validateFinalQuiz(quiz: Quiz): { isValid: boolean; errors: string[] } {
+    const errors: string[] = [];
+    
+    // Check quiz structure
+    if (!quiz.id || typeof quiz.id !== 'string') {
+      errors.push("Quiz missing valid ID");
+    }
+    
+    if (!quiz.title || typeof quiz.title !== 'string' || quiz.title.trim().length === 0) {
+      errors.push("Quiz missing valid title");
+    }
+    
+    if (!quiz.courseId || typeof quiz.courseId !== 'string') {
+      errors.push("Quiz missing valid course ID");
+    }
+    
+    if (!quiz.questions || !Array.isArray(quiz.questions)) {
+      errors.push("Quiz missing questions array");
+      return { isValid: false, errors };
+    }
+    
+    if (quiz.questions.length === 0) {
+      errors.push("Quiz has no questions");
+      return { isValid: false, errors };
+    }
+    
+    // Validate each transformed question
+    quiz.questions.forEach((question, index) => {
+      const questionNum = index + 1;
+      
+      if (!question.id || typeof question.id !== 'string') {
+        errors.push(`Question ${questionNum}: Missing valid ID`);
+      }
+      
+      if (!question.question || typeof question.question !== 'string' || question.question.trim().length === 0) {
+        errors.push(`Question ${questionNum}: Missing valid question text`);
+      }
+      
+      if (!question.options || !Array.isArray(question.options)) {
+        errors.push(`Question ${questionNum}: Missing options array`);
+        return;
+      }
+      
+      if (question.options.length < 2) {
+        errors.push(`Question ${questionNum}: Must have at least 2 options`);
+      }
+      
+      // Check that all options are strings
+      question.options.forEach((option, optIndex) => {
+        if (typeof option !== 'string' || option.trim().length === 0) {
+          errors.push(`Question ${questionNum}, Option ${optIndex + 1}: Invalid option text`);
+        }
+      });
+      
+      // Validate correct answer index
+      if (typeof question.correctAnswer !== 'number') {
+        errors.push(`Question ${questionNum}: Missing correct answer index`);
+      } else if (question.correctAnswer < 0 || question.correctAnswer >= question.options.length) {
+        errors.push(`Question ${questionNum}: Correct answer index (${question.correctAnswer}) is out of range`);
+      }
+      
+      // Check explanation
+      if (!question.explanation || typeof question.explanation !== 'string' || question.explanation.trim().length === 0) {
+        errors.push(`Question ${questionNum}: Missing explanation for correct answer`);
+      }
+    });
+    
+    console.log(`🔍 Final quiz validation: ${errors.length === 0 ? 'PASSED' : 'FAILED'}`);
+    if (errors.length > 0) {
+      console.log('❌ Final validation errors:', errors);
+    }
+    
+    return {
+      isValid: errors.length === 0,
+      errors
+    };
+  }
+
+  /**
+   * Fallback method to extract questions when JSON parsing fails
+   */
+  private fallbackQuestionExtraction(rawText: string): Array<{
+    id: number;
+    text: string;
+    options: Array<{
+      id: number;
+      text: string;
+      isCorrect: boolean;
+      explanation: string;
+    }>;
+  }> {
+    console.log('🔄 Attempting fallback question extraction...');
+    
+    // Try to find individual question objects using regex
+    const questionMatches = rawText.match(/\{[^{}]*"id"\s*:\s*\d+[^{}]*"text"[^{}]*"options"[^{}]*\}/g);
+    
+    if (questionMatches) {
+      const questions = [];
+      for (let i = 0; i < questionMatches.length; i++) {
+        try {
+          const questionObj = JSON.parse(questionMatches[i]);
+          questions.push(questionObj);
+        } catch (e) {
+          console.warn(`⚠️ Could not parse question ${i + 1}:`, e);
+        }
+      }
+      
+      if (questions.length > 0) {
+        console.log(`✅ Fallback extracted ${questions.length} questions`);
+        return questions;
+      }
+    }
+    
+    // If all else fails, return empty array
+    console.warn('⚠️ Could not extract any questions from response');
+    return [];
   }
 
   /**

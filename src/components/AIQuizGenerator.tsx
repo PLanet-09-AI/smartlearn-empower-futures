@@ -9,6 +9,7 @@ import { quizService } from "@/services/quizService";
 import { Loader2, Award, CheckCircle, X, Settings } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { useModelSync } from "@/hooks/useModelSync";
 import { Separator } from "./ui/separator";
 import { Progress } from "./ui/progress";
 import { Textarea } from "./ui/textarea";
@@ -69,6 +70,7 @@ Make sure to create varied questions covering different sections of the content.
 const AIQuizGenerator = ({ courseId, courseTitle, onQuizComplete, isLecturer = false }: AIQuizGeneratorProps) => {
   const { toast } = useToast();
   const { currentUser } = useAuth();
+  const { selectedModel } = useModelSync(); // Sync the selected model with the service
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [quiz, setQuiz] = useState<Quiz | null>(null);
@@ -130,7 +132,7 @@ const AIQuizGenerator = ({ courseId, courseTitle, onQuizComplete, isLecturer = f
       
       const result = await quizService.startQuiz(
         courseId, 
-        currentUser.uid, 
+        currentUser.id, 
         numQuestions,
         customPrompt,
         temperature
@@ -150,9 +152,36 @@ const AIQuizGenerator = ({ courseId, courseTitle, onQuizComplete, isLecturer = f
       });
     } catch (error) {
       console.error("Error generating AI quiz:", error);
+      
+      // Provide specific error messages based on the error type
+      let errorMessage = "Failed to generate AI quiz. Please try again.";
+      let errorTitle = "Quiz Generation Error";
+      
+      if (error instanceof Error) {
+        if (error.message.includes('Invalid quiz generated')) {
+          errorTitle = "Invalid Quiz Content";
+          errorMessage = "The AI model didn't generate a valid quiz format. This might happen with certain models. Try selecting a different model or regenerating the quiz.";
+        } else if (error.message.includes('Quiz structure invalid')) {
+          errorTitle = "Quiz Structure Error";
+          errorMessage = "The generated quiz has structural issues (missing correct answers or explanations). Please try regenerating with a different model.";
+        } else if (error.message.includes('No questions were generated')) {
+          errorTitle = "No Questions Generated";
+          errorMessage = "The AI model didn't generate any questions. This might be due to model limitations. Try using a different model or adjusting your prompt.";
+        } else if (error.message.includes('No correct answer specified')) {
+          errorTitle = "Missing Correct Answers";
+          errorMessage = "The AI model generated questions but didn't mark any correct answers. This is a common issue with some models. Try regenerating or using a different model like 'llama3' or 'mistral'.";
+        } else if (error.message.includes('all options marked as false')) {
+          errorTitle = "AI Model Logic Error";
+          errorMessage = "The AI model marked all answer options as incorrect, which makes the quiz unsolvable. This suggests the model needs better prompting. Try regenerating or switching to a more capable model.";
+        } else if (error.message.includes('Cannot connect to Ollama') || error.message.includes('Model') && error.message.includes('not found')) {
+          errorTitle = "Model Connection Error";
+          errorMessage = error.message;
+        }
+      }
+      
       toast({
-        title: "Error",
-        description: "Failed to generate AI quiz. Please try again.",
+        title: errorTitle,
+        description: errorMessage,
         variant: "destructive"
       });
     } finally {
@@ -194,7 +223,7 @@ const AIQuizGenerator = ({ courseId, courseTitle, onQuizComplete, isLecturer = f
         }))
       };
       
-      const result = await quizService.submitQuiz(quizResultId, currentUser.uid, submission);
+      const result = await quizService.submitQuiz(quizResultId, currentUser.id, submission);
       
       setScore(result.score);
       setFeedback({
@@ -209,7 +238,7 @@ const AIQuizGenerator = ({ courseId, courseTitle, onQuizComplete, isLecturer = f
       
       // Log high score achievement
       if (result.isNewHighScore) {
-        console.log(`🎉 NEW HIGH SCORE! User ${currentUser.uid} achieved ${result.score}% (previous best: ${result.previousHighScore}%) in course ${courseId}`);
+        console.log(`🎉 NEW HIGH SCORE! User ${currentUser.id} achieved ${result.score}% (previous best: ${result.previousHighScore}%) in course ${courseId}`);
       }
       
       // Notify parent component
@@ -467,6 +496,14 @@ Make sure to create varied questions covering different sections of the content.
               </Collapsible>
             )}
             
+            {/* Model indicator */}
+            <div className="flex items-center justify-center gap-2 p-3 bg-gray-50 rounded-lg border">
+              <span className="text-sm text-gray-600">Using AI Model:</span>
+              <code className="text-sm font-mono bg-white px-2 py-1 rounded border text-purple-600">
+                {selectedModel}
+              </code>
+            </div>
+            
             <Button 
               className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-medium py-6 text-lg shadow-md" 
               onClick={generateQuiz}
@@ -480,41 +517,79 @@ Make sure to create varied questions covering different sections of the content.
           <div className="py-12 flex flex-col items-center justify-center space-y-4">
             <Loader2 className="h-12 w-12 animate-spin text-purple-600" />
             <p className="text-center text-gray-600">
-              Generating quiz based on course content...
+              Generating quiz using <code className="font-mono bg-gray-100 px-1 rounded">{selectedModel}</code>...
+              <br />
+              <span className="text-sm text-amber-600">⚠️ If this takes too long, the model might not be responding properly</span>
               <br />
               <span className="text-sm">This may take a moment</span>
             </p>
           </div>
         )}
         
-        {quiz && !quizCompleted && (
-          <div className="space-y-6">
-            {/* Progress indicator */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-500">
-                  Question {currentQuestionIndex + 1} of {quiz.questions.length}
-                </span>
-                <span className="text-sm font-medium">
-                  {Math.round(((answers.filter(a => a >= 0).length) / quiz.questions.length) * 100)}% answered
-                </span>
-              </div>
-              <Progress value={(answers.filter(a => a >= 0).length / quiz.questions.length) * 100} />
-            </div>
+        {quiz && !quizCompleted && (() => {
+          // Safety validation before displaying quiz
+          const currentQuestion = quiz.questions[currentQuestionIndex];
+          const hasValidCurrentQuestion = currentQuestion && 
+            currentQuestion.question && 
+            currentQuestion.options && 
+            currentQuestion.options.length >= 2 &&
+            currentQuestion.correctAnswer >= 0 && 
+            currentQuestion.correctAnswer < currentQuestion.options.length &&
+            currentQuestion.explanation;
             
-            {/* Course Content Quiz Introduction */}
-            {currentQuestionIndex === 0 && (
-              <div className="bg-slate-50 p-4 rounded-md border border-slate-200 mb-4">
-                <h4 className="font-medium mb-2">Course Content Quiz</h4>
-                <p className="text-sm text-slate-700">
-                  This quiz has been generated based on the content of <strong>{courseTitle}</strong>. 
-                  Questions test your understanding of key concepts covered in this course.
-                </p>
+          if (!hasValidCurrentQuestion) {
+            return (
+              <div className="py-12 flex flex-col items-center justify-center space-y-4">
+                <X className="h-12 w-12 text-red-500" />
+                <div className="text-center">
+                  <h3 className="text-lg font-medium text-red-700 mb-2">Invalid Quiz Question</h3>
+                  <p className="text-gray-600 mb-4">
+                    Question {currentQuestionIndex + 1} has missing or invalid data and cannot be displayed safely.
+                  </p>
+                  <Button 
+                    onClick={() => {
+                      setQuiz(null);
+                      setQuizCompleted(false);
+                      setCurrentQuestionIndex(0);
+                      setAnswers([]);
+                    }}
+                    variant="outline"
+                  >
+                    Generate New Quiz
+                  </Button>
+                </div>
               </div>
-            )}
-            
-            {/* Current question */}
-            {currentQuestion && (
+            );
+          }
+          
+          return (
+            <div className="space-y-6">
+              {/* Progress indicator */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-gray-500">
+                    Question {currentQuestionIndex + 1} of {quiz.questions.length}
+                  </span>
+                  <span className="text-sm font-medium">
+                    {Math.round(((answers.filter(a => a >= 0).length) / quiz.questions.length) * 100)}% answered
+                  </span>
+                </div>
+                <Progress value={(answers.filter(a => a >= 0).length / quiz.questions.length) * 100} />
+              </div>
+              
+              {/* Course Content Quiz Introduction */}
+              {currentQuestionIndex === 0 && (
+                <div className="bg-slate-50 p-4 rounded-md border border-slate-200 mb-4">
+                  <h4 className="font-medium mb-2">Course Content Quiz</h4>
+                  <p className="text-sm text-slate-700">
+                    This quiz has been generated based on the content of <strong>{courseTitle}</strong>. 
+                    Questions test your understanding of key concepts covered in this course.
+                  </p>
+                </div>
+              )}
+              
+              {/* Current question */}
+              {currentQuestion && (
               <div className="space-y-4">
                 <h3 className="text-lg font-medium">{currentQuestion.question}</h3>
                 
@@ -565,7 +640,8 @@ Make sure to create varied questions covering different sections of the content.
               )}
             </div>
           </div>
-        )}
+          );
+        })()}
         
         {quizCompleted && (
           <div className="py-8 text-center space-y-6">
